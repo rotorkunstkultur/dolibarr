@@ -1,3 +1,9 @@
+# DOLIBARR SKR04
+
+This branchrepo is purely to develope and maintain an skr04 branch for updating the German Chart Of Account "SKR04" as developed by DATEV: https://www.datev.de/web/de/datev-shop/material/kontenrahmen-datev-skr-04/
+
+
+
 # DOLIBARR ERP & CRM
 
 ![Downloads per day](https://img.shields.io/sourceforge/dw/dolibarr.svg)
