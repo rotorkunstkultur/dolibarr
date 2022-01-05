@@ -629,8 +629,7 @@ if (!empty($conf->use_javascript_ajax)) {	// If javascript on
 	}
 
 	$s .= "\n".'<!-- End div to calendars selectors -->'."\n";
-} else // If javascript off
-{
+} else { // If javascript off
 	$newparam = $param; // newparam is for birthday links
 	$newparam = preg_replace('/showbirthday=[0-1]/i', 'showbirthday='.(empty($showbirthday) ? 1 : 0), $newparam);
 	if (!preg_match('/showbirthday=/i', $newparam)) {
@@ -722,7 +721,7 @@ if (empty($user->rights->societe->client->voir) && !$socid) {
 	$sql .= " AND (a.fk_soc IS NULL OR sc.fk_user = ".((int) $user->id).")";
 }
 if ($socid > 0) {
-	$sql .= ' AND a.fk_soc = '.$socid;
+	$sql .= " AND a.fk_soc = ".((int) $socid);
 }
 // We must filter on assignement table
 if ($filtert > 0 || $usergroup > 0) {
