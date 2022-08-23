@@ -1,5 +1,6 @@
 # Dolibarr language file - Source file is en_US - receptions
-ReceptionsSetup=Product Reception setup
+ReceptionDescription=Vendor reception management (Create reception documents)
+ReceptionsSetup=Vendor Reception setup
 RefReception=Ref. reception
 Reception=Reception
 Receptions=Receptions
@@ -47,7 +48,6 @@ ReceptionsNumberingModules=Numbering module for receptions
 ReceptionsReceiptModel=Document templates for receptions
 NoMorePredefinedProductToDispatch=No more predefined products to dispatch
 ReceptionExist=A reception exists
-ByingPrice=Bying price
 ReceptionBackToDraftInDolibarr=Reception %s back to draft
 ReceptionClassifyClosedInDolibarr=Reception %s classified Closed
 ReceptionUnClassifyCloseddInDolibarr=Reception %s re-open

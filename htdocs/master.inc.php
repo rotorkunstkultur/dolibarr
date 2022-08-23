@@ -32,7 +32,8 @@
  * 				This script reads the conf file, init $lang, $db and and empty $user
  */
 
-// Declaration of variables. May have been already require by main.inc.php. But may not by scripts. So, here the require_once must be kept.
+// Include the conf.php and functions.lib.php and security.lib.php. This defined the constants like DOL_DOCUMENT_ROOT, DOL_DATA_ROOT, DOL_URL_ROOT...
+// This file may have been already required by main.inc.php. But may not by scripts. So, here the require_once must be kept.
 require_once 'filefunc.inc.php';
 
 
@@ -74,8 +75,9 @@ if (defined('TEST_DB_FORCE_TYPE')) {
 
 // Set properties specific to conf file
 $conf->file->main_limit_users = $dolibarr_main_limit_users;
-$conf->file->mailing_limit_sendbyweb = $dolibarr_mailing_limit_sendbyweb;
-$conf->file->mailing_limit_sendbycli = $dolibarr_mailing_limit_sendbycli;
+$conf->file->mailing_limit_sendbyweb = empty($dolibarr_mailing_limit_sendbyweb) ? 0 : $dolibarr_mailing_limit_sendbyweb;
+$conf->file->mailing_limit_sendbycli = empty($dolibarr_mailing_limit_sendbycli) ? 0 : $dolibarr_mailing_limit_sendbycli;
+$conf->file->mailing_limit_sendbyday = empty($dolibarr_mailing_limit_sendbyday) ? 0 : $dolibarr_mailing_limit_sendbyday;
 $conf->file->main_authentication = empty($dolibarr_main_authentication) ? '' : $dolibarr_main_authentication; // Identification mode
 $conf->file->main_force_https = empty($dolibarr_main_force_https) ? '' : $dolibarr_main_force_https; // Force https
 $conf->file->strict_mode = empty($dolibarr_strict_mode) ? '' : $dolibarr_strict_mode; // Force php strict mode (for debug)

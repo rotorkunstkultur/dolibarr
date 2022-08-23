@@ -56,8 +56,8 @@ if (!$user->rights->projet->lire) {
 	accessforbidden();
 }
 
-$sortfield = GETPOST("sortfield", 'alpha');
-$sortorder = GETPOST("sortorder", 'alpha');
+$sortfield = GETPOST('sortfield', 'aZ09comma');
+$sortorder = GETPOST('sortorder', 'aZ09comma');
 
 $max = $conf->global->MAIN_SIZE_SHORTLIST_LIMIT;
 
@@ -288,7 +288,10 @@ if ($resql) {
 			print '</td>';
 
 			// Date
-			print '<td>'.dol_print_date($db->jdate($obj->datem), 'day').'</td>';
+			$datem = $db->jdate($obj->datem);
+			print '<td class="center" title="'.dol_escape_htmltag($langs->trans("DateModification").': '.dol_print_date($datem, 'dayhour', 'tzuserrel')).'">';
+			print dol_print_date($datem, 'day', 'tzuserrel');
+			print '</td>';
 
 			// Status
 			print '<td class="right">'.$projectstatic->LibStatut($obj->status, 3).'</td>';

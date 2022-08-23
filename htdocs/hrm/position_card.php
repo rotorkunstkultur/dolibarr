@@ -171,18 +171,18 @@ if (empty($reshook)) {
 	include DOL_DOCUMENT_ROOT . '/core/actions_sendmails.inc.php';
 }
 
-DisplayPositionCard($object);
+
+displayPositionCard($object);
+
 
 /**
  * 		Show the card of a position
  *
  * 		@param	Position		 $object		  Position object
- *
  * 		@return void
  */
-function DisplayPositionCard(&$object)
+function displayPositionCard(&$object)
 {
-
 	global $user, $langs, $db, $conf, $extrafields, $hookmanager, $action, $permissiontoadd, $permissiontodelete;
 
 	$id = $object->id;
@@ -245,7 +245,7 @@ function DisplayPositionCard(&$object)
 		$res = $object->fetch_optionals();
 
 
-		$head = PositionCardPrepareHead($object);
+		$head = positionCardPrepareHead($object);
 		print dol_get_fiche_head($head, 'position', $langs->trans("Workstation"), -1, $object->picto);
 
 		$formconfirm = '';
@@ -276,7 +276,7 @@ function DisplayPositionCard(&$object)
 		$morehtmlref = '<div class="refidno">';
 		$u_position = new User(($db));
 		$u_position->fetch($object->fk_user);
-		$morehtmlref .= $langs->trans('Employee').' : '.$u_position->getNomUrl(1);
+		$morehtmlref .= $langs->trans('Employee').' : '.($u_position->id > 0 ? $u_position->getNomUrl(1) : '');
 		$job = new Job($db);
 		$job->fetch($object->fk_job);
 		$morehtmlref .= '<br>'.$langs->trans('Job').' : '.$job->getNomUrl(1);
@@ -348,7 +348,7 @@ function DisplayPositionCard(&$object)
 //
 //	$MAXEVENT = 10;
 //
-//	$morehtmlright = dolGetButtonTitle($langs->trans('SeeAll'), '', 'fa fa-list-alt imgforviewmode', DOL_URL_ROOT.'/societe/agenda.php?socid='.$object->id);
+//	$morehtmlright = dolGetButtonTitle($langs->trans('SeeAll'), '', 'fa fa-bars imgforviewmode', DOL_URL_ROOT.'/societe/agenda.php?socid='.$object->id);
 //
 //	// List of actions on element
 //	include_once DOL_DOCUMENT_ROOT.'/core/class/html.formactions.class.php';
@@ -377,7 +377,7 @@ if ($action !== 'edit' && $action !== 'create') {
 
 	$MAXEVENT = 10;
 
-	$morehtmlcenter = dolGetButtonTitle($langs->trans('SeeAll'), '', 'fa fa-list-alt imgforviewmode', DOL_URL_ROOT.'/hrm/position_agenda.php?id='.$object->id);
+	$morehtmlcenter = dolGetButtonTitle($langs->trans('SeeAll'), '', 'fa fa-bars imgforviewmode', DOL_URL_ROOT.'/hrm/position_agenda.php?id='.$object->id);
 
 	// List of actions on element
 	include_once DOL_DOCUMENT_ROOT . '/core/class/html.formactions.class.php';

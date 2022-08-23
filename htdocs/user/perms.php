@@ -50,13 +50,13 @@ if (!isset($id) || empty($id)) {
 }
 
 // Define if user can read permissions
-$canreaduser = ($user->admin || $user->rights->user->user->lire);
+$canreaduser = ($user->admin || $user->hasRight("user", "user", "read"));
 // Define if user can modify other users and permissions
-$caneditperms = ($user->admin || $user->rights->user->user->creer);
+$caneditperms = ($user->admin || $user->hasRight("user", "user", "write"));
 // Advanced permissions
 if (!empty($conf->global->MAIN_USE_ADVANCED_PERMS)) {
-	$canreaduser = ($user->admin || ($user->rights->user->user->lire && $user->rights->user->user_advance->readperms));
-	$caneditselfperms = ($user->id == $id && $user->rights->user->self_advance->writeperms);
+	$canreaduser = ($user->admin || ($user->hasRight("user", "user", "read") && $user->hasRight("user", "user_advance", "readperms")));
+	$caneditselfperms = ($user->id == $id && $user->hasRight("user", "self_advance", "writeperms"));
 	$caneditperms = (($caneditperms || $caneditselfperms) ? 1 : 0);
 }
 
@@ -65,9 +65,9 @@ $socid = 0;
 if (isset($user->socid) && $user->socid > 0) {
 	$socid = $user->socid;
 }
-$feature2 = (($socid && $user->rights->user->self->creer) ? '' : 'user');
+$feature2 = (($socid && $user->hasRight("user", "self", "write")) ? '' : 'user');
 // A user can always read its own card if not advanced perms enabled, or if he has advanced perms, except for admin
-if ($user->id == $id && (!empty($conf->global->MAIN_USE_ADVANCED_PERMS) && empty($user->rights->user->self_advance->readperms) && empty($user->admin))) {
+if ($user->id == $id && (!empty($conf->global->MAIN_USE_ADVANCED_PERMS) && !$user->hasRight("user", "self_advance", "readperms") && empty($user->admin))) {
 	accessforbidden();
 }
 
@@ -143,7 +143,10 @@ if (empty($reshook)) {
 
 $form = new Form($db);
 
-llxHeader('', $langs->trans("Permissions"));
+$person_name = !empty($object->firstname) ? $object->lastname.", ".$object->firstname : $object->lastname;
+$title = $person_name." - ".$langs->trans('Permissions');
+$help_url = '';
+llxHeader('', $title, $help_url);
 
 $head = user_prepare_head($object);
 
@@ -246,14 +249,47 @@ if ($result) {
 
 $linkback = '';
 
-if ($user->rights->user->user->lire || $user->admin) {
+if ($user->hasRight("user", "user", "read") || $user->admin) {
 	$linkback = '<a href="'.DOL_URL_ROOT.'/user/list.php?restore_lastsearch_values=1">'.$langs->trans("BackToList").'</a>';
 }
 
-dol_banner_tab($object, 'id', $linkback, $user->rights->user->user->lire || $user->admin);
+$morehtmlref = '<a href="'.DOL_URL_ROOT.'/user/vcard.php?id='.$object->id.'" class="refid">';
+$morehtmlref .= img_picto($langs->trans("Download").' '.$langs->trans("VCard"), 'vcard.png', 'class="valignmiddle marginleftonly paddingrightonly"');
+$morehtmlref .= '</a>';
 
+dol_banner_tab($object, 'id', $linkback, $user->hasRight("user", "user", "read") || $user->admin, 'rowid', 'ref', $morehtmlref);
+
+
+print '<div class="fichecenter">';
 
 print '<div class="underbanner clearboth"></div>';
+print '<table class="border centpercent tableforfield">';
+
+// Login
+print '<tr><td class="titlefield">'.$langs->trans("Login").'</td>';
+if (!empty($object->ldap_sid) && $object->statut == 0) {
+	print '<td class="error">';
+	print $langs->trans("LoginAccountDisableInDolibarr");
+	print '</td>';
+} else {
+	print '<td>';
+	$addadmin = '';
+	if (property_exists($object, 'admin')) {
+		if (!empty($conf->multicompany->enabled) && !empty($object->admin) && empty($object->entity)) {
+			$addadmin .= img_picto($langs->trans("SuperAdministratorDesc"), "redstar", 'class="paddingleft"');
+		} elseif (!empty($object->admin)) {
+			$addadmin .= img_picto($langs->trans("AdministratorDesc"), "star", 'class="paddingleft"');
+		}
+	}
+	print showValueWithClipboardCPButton($object->login).$addadmin;
+	print '</td>';
+}
+print '</tr>'."\n";
+
+print '</table>';
+
+print '</div>';
+print '<br>';
 
 if ($user->admin) {
 	print info_admin($langs->trans("WarningOnlyPermissionOfActivatedModules"));
@@ -291,6 +327,72 @@ if ($user->admin) {
 	print '<td class="right"></td>';
 }
 print '</tr>'."\n";
+
+
+// Fix bad value for module_position in table
+// ------------------------------------------
+$sql = "SELECT r.id, r.libelle as label, r.module, r.perms, r.subperms, r.module_position, r.bydefault";
+$sql .= " FROM ".MAIN_DB_PREFIX."rights_def as r";
+$sql .= " WHERE r.libelle NOT LIKE 'tou%'"; // On ignore droits "tous"
+$sql .= " AND r.entity = ".((int) $entity);
+$sql .= " ORDER BY r.family_position, r.module_position, r.module, r.id";
+
+$result = $db->query($sql);
+if ($result) {
+	$num = $db->num_rows($result);
+	$i = 0;
+	$oldmod = '';
+
+	while ($i < $num) {
+		$obj = $db->fetch_object($result);
+
+		// If line is for a module that does not exist anymore (absent of includes/module), we ignore it
+		if (!isset($obj->module) || empty($modules[$obj->module])) {
+			$i++;
+			continue;
+		}
+
+		// Special cases
+		if (!empty($conf->reception->enabled)) {
+			// The 2 permissions in fournisseur modules are replaced by permissions into reception module
+			if ($obj->module == 'fournisseur' && $obj->perms == 'commande' && $obj->subperms == 'receptionner') {
+				$i++;
+				continue;
+			}
+			if ($obj->module == 'fournisseur' && $obj->perms == 'commande_advance' && $obj->subperms == 'check') {
+				$i++;
+				continue;
+			}
+		}
+
+		$objMod = $modules[$obj->module];
+
+		// Save field module_position in database if value is wrong
+		if (empty($obj->module_position) || (is_object($objMod) && $objMod->isCoreOrExternalModule() == 'external' && $obj->module_position < 100000)) {
+			if (is_object($modules[$obj->module]) && ($modules[$obj->module]->module_position > 0)) {
+				// TODO Define familyposition
+				//$familyposition = $modules[$obj->module]->family_position;
+				$familyposition = 0;
+
+				$newmoduleposition = $modules[$obj->module]->module_position;
+
+				// Correct $newmoduleposition position for external modules
+				$objMod = $modules[$obj->module];
+				if (is_object($objMod) && $objMod->isCoreOrExternalModule() == 'external' && $newmoduleposition < 100000) {
+					$newmoduleposition += 100000;
+				}
+
+				$sqlupdate = 'UPDATE '.MAIN_DB_PREFIX."rights_def SET module_position = ".((int) $newmoduleposition).",";
+				$sqlupdate .= " family_position = ".((int) $familyposition);
+				$sqlupdate .= " WHERE module_position = ".((int) $obj->module_position)." AND module = '".$db->escape($obj->module)."'";
+
+				$db->query($sqlupdate);
+			}
+		}
+	}
+}
+
+
 
 //print "xx".$conf->global->MAIN_USE_ADVANCED_PERMS;
 $sql = "SELECT r.id, r.libelle as label, r.module, r.perms, r.subperms, r.module_position, r.bydefault";
@@ -333,6 +435,7 @@ if ($result) {
 		$objMod = $modules[$obj->module];
 
 		// Save field module_position in database if value is wrong
+		/*
 		if (empty($obj->module_position) || (is_object($objMod) && $objMod->isCoreOrExternalModule() == 'external' && $obj->module_position < 100000)) {
 			if (is_object($modules[$obj->module]) && ($modules[$obj->module]->module_position > 0)) {
 				// TODO Define familyposition
@@ -354,6 +457,7 @@ if ($result) {
 				$db->query($sqlupdate);
 			}
 		}
+		*/
 
 		// Break found, it's a new module to catch
 		if (isset($obj->module) && ($oldmod <> $obj->module)) {

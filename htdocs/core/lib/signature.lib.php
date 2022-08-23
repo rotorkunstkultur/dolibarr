@@ -51,12 +51,13 @@ function showOnlineSignatureUrl($type, $ref)
 /**
  * Return string with full Url
  *
- * @param   int		$mode		0=True url, 1=Url formated with colors
- * @param   string	$type		Type of URL ('proposal', ...)
- * @param	string	$ref		Ref of object
- * @return	string				Url string
+ * @param   int		$mode				0=True url, 1=Url formated with colors
+ * @param   string	$type				Type of URL ('proposal', ...)
+ * @param	string	$ref				Ref of object
+ * @param   string  $localorexternal  	0=Url for browser, 1=Url for external access
+ * @return	string						Url string
  */
-function getOnlineSignatureUrl($mode, $type, $ref = '')
+function getOnlineSignatureUrl($mode, $type, $ref = '', $localorexternal = 1)
 {
 	global $conf, $db, $langs, $dolibarr_main_url_root;
 
@@ -68,16 +69,16 @@ function getOnlineSignatureUrl($mode, $type, $ref = '')
 	$urlwithroot = $urlwithouturlroot.DOL_URL_ROOT; // This is to use external domain name found into config file
 	//$urlwithroot=DOL_MAIN_URL_ROOT;					// This is to use same domain name than current
 
-	$localorexternal = 1; // external
-
 	$urltouse = DOL_MAIN_URL_ROOT;
 	if ($localorexternal) {
 		$urltouse = $urlwithroot;
 	}
 
-	$securekeyseed = $conf->global->PROPOSAL_ONLINE_SIGNATURE_SECURITY_TOKEN;
+	$securekeyseed = '';
 
 	if ($type == 'proposal') {
+		$securekeyseed = isset($conf->global->PROPOSAL_ONLINE_SIGNATURE_SECURITY_TOKEN) ? $conf->global->PROPOSAL_ONLINE_SIGNATURE_SECURITY_TOKEN : '';
+
 		$out = $urltouse.'/public/onlinesign/newonlinesign.php?source=proposal&ref='.($mode ? '<span style="color: #666666">' : '');
 		if ($mode == 1) {
 			$out .= 'proposal_ref';
@@ -89,7 +90,7 @@ function getOnlineSignatureUrl($mode, $type, $ref = '')
 		if ($mode == 1) {
 			$out .= "hash('".$securekeyseed."' + '".$type."' + proposal_ref)";
 		} else {
-			$out .= '&securekey='.dol_hash($securekeyseed.$type.$ref, '0');
+			$out .= '&securekey='.dol_hash($securekeyseed.$type.$ref.(empty($conf->multicompany->enabled) ? '' : $object->entity), '0');
 		}
 		/*
 		if ($mode == 1) {
@@ -118,11 +119,9 @@ function getOnlineSignatureUrl($mode, $type, $ref = '')
 	}
 
 	// For multicompany
-	/*
-	if (!empty($out)) {
-		$out .= "&entity=".$conf->entity; // Check the entity because He may be the same reference in several entities
+	if (!empty($out) && !empty($conf->multicompany->enabled)) {
+		$out .= "&entity=".$conf->entity; // Check the entity because we may have the same reference in several entities
 	}
-	*/
 
 	return $out;
 }

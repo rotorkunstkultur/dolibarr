@@ -29,6 +29,7 @@
 require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
 /**
  * Class to manage accounting accounts
  */
@@ -168,7 +169,7 @@ class AccountingAccount extends CommonObject
 		global $conf;
 
 		$this->db = $db;
-		$this->next_prev_filter = "fk_pcg_version IN (SELECT pcg_version FROM ".MAIN_DB_PREFIX."accounting_system WHERE rowid=".((int) $conf->global->CHARTOFACCOUNTS).")"; // Used to add a filter in Form::showrefnav method
+		$this->next_prev_filter = "fk_pcg_version IN (SELECT pcg_version FROM ".MAIN_DB_PREFIX."accounting_system WHERE rowid = ".((int) $conf->global->CHARTOFACCOUNTS).")"; // Used to add a filter in Form::showrefnav method
 	}
 
 	/**
@@ -197,7 +198,7 @@ class AccountingAccount extends CommonObject
 				$sql .= " AND a.entity = ".$conf->entity;
 			}
 			if (!empty($limittocurrentchart)) {
-				$sql .= ' AND a.fk_pcg_version IN (SELECT pcg_version FROM '.MAIN_DB_PREFIX.'accounting_system WHERE rowid='.$this->db->escape($conf->global->CHARTOFACCOUNTS).')';
+				$sql .= ' AND a.fk_pcg_version IN (SELECT pcg_version FROM '.MAIN_DB_PREFIX.'accounting_system WHERE rowid = '.((int) $conf->global->CHARTOFACCOUNTS).')';
 			}
 			if (!empty($limittoachartaccount)) {
 				$sql .= " AND a.fk_pcg_version = '".$this->db->escape($limittoachartaccount)."'";
@@ -346,8 +347,8 @@ class AccountingAccount extends CommonObject
 	/**
 	 * Update record
 	 *
-	 * @param User $user Use making update
-	 * @return int             <0 if KO, >0 if OK
+	 * @param User $user 		User making update
+	 * @return int             	<0 if KO (-2 = duplicate), >0 if OK
 	 */
 	public function update($user)
 	{
@@ -377,6 +378,12 @@ class AccountingAccount extends CommonObject
 			$this->db->commit();
 			return 1;
 		} else {
+			if ($this->db->lasterrno() == 'DB_ERROR_RECORD_ALREADY_EXISTS') {
+				$this->error = $this->db->lasterror();
+				$this->db->rollback();
+				return -2;
+			}
+
 			$this->error = $this->db->lasterror();
 			$this->db->rollback();
 			return -1;
@@ -475,7 +482,7 @@ class AccountingAccount extends CommonObject
 	 */
 	public function getNomUrl($withpicto = 0, $withlabel = 0, $nourl = 0, $moretitle = '', $notooltip = 0, $save_lastsearch_value = -1, $withcompletelabel = 0, $option = '')
 	{
-		global $langs, $conf;
+		global $langs, $conf, $hookmanager;
 		require_once DOL_DOCUMENT_ROOT . '/core/lib/accounting.lib.php';
 
 		if (!empty($conf->dol_no_mouse_hover)) {
@@ -560,13 +567,22 @@ class AccountingAccount extends CommonObject
 		if ($withpicto != 2) {
 			$result .= $linkstart . $label_link . $linkend;
 		}
+		global $action;
+		$hookmanager->initHooks(array($this->element . 'dao'));
+		$parameters = array('id'=>$this->id, 'getnomurl' => &$result);
+		$reshook = $hookmanager->executeHooks('getNomUrl', $parameters, $this, $action); // Note that $action and $object may have been modified by some hooks
+		if ($reshook > 0) {
+			$result = $hookmanager->resPrint;
+		} else {
+			$result .= $hookmanager->resPrint;
+		}
 		return $result;
 	}
 
 	/**
 	 * Information on record
 	 *
-	 * @param int $id of record
+	 * @param int 	$id 	ID of record
 	 * @return void
 	 */
 	public function info($id)
@@ -576,26 +592,19 @@ class AccountingAccount extends CommonObject
 		$sql .= ' WHERE a.rowid = ' . ((int) $id);
 
 		dol_syslog(get_class($this) . '::info sql=' . $sql);
-		$result = $this->db->query($sql);
+		$resql = $this->db->query($sql);
 
-		if ($result) {
-			if ($this->db->num_rows($result)) {
-				$obj = $this->db->fetch_object($result);
+		if ($resql) {
+			if ($this->db->num_rows($resql)) {
+				$obj = $this->db->fetch_object($resql);
 				$this->id = $obj->rowid;
-				if ($obj->fk_user_author) {
-					$cuser = new User($this->db);
-					$cuser->fetch($obj->fk_user_author);
-					$this->user_creation = $cuser;
-				}
-				if ($obj->fk_user_modif) {
-					$muser = new User($this->db);
-					$muser->fetch($obj->fk_user_modif);
-					$this->user_modification = $muser;
-				}
+
+				$this->user_creation_id = $obj->fk_user_author;
+				$this->user_modification_id = $obj->fk_user_modif;
 				$this->date_creation = $this->db->jdate($obj->datec);
 				$this->date_modification = $this->db->jdate($obj->tms);
 			}
-			$this->db->free($result);
+			$this->db->free($resql);
 		} else {
 			dol_print_error($this->db);
 		}
@@ -723,7 +732,7 @@ class AccountingAccount extends CommonObject
 	 * @param 	FactureLigne|SupplierInvoiceLine	$factureDet 		Facture Det
 	 * @param 	array 								$accountingAccount 	Array of Account account
 	 * @param 	string 								$type 				Customer / Supplier
-	 * @return	array       											Accounting accounts suggested
+	 * @return	array|int      											Accounting accounts suggested or < 0 if technical error.
 	 */
 	public function getAccountingCodeToBind(Societe $buyer, Societe $seller, Product $product, $facture, $factureDet, $accountingAccount = array(), $type = '')
 	{
@@ -731,13 +740,14 @@ class AccountingAccount extends CommonObject
 		global $hookmanager;
 
 		// Instantiate hooks for external modules
-		$hookmanager->initHooks(array('accoutancyBindingCalculation'));
+		$hookmanager->initHooks(array('accountancyBindingCalculation'));
 
-		// Execute hook accoutancyBindingCalculation
+		// Execute hook accountancyBindingCalculation
 		$parameters = array('buyer' => $buyer, 'seller' => $seller, 'product' => $product, 'facture' => $facture, 'factureDet' => $factureDet ,'accountingAccount'=>$accountingAccount, $type);
-		$reshook = $hookmanager->executeHooks('accoutancyBindingCalculation', $parameters); // Note that $action and $object may have been modified by some hooks
+		$reshook = $hookmanager->executeHooks('accountancyBindingCalculation', $parameters); // Note that $action and $object may have been modified by some hooks
 
 		if (empty($reshook)) {
+			$const_name = '';
 			if ($type == 'customer') {
 				$const_name = "SOLD";
 			} elseif ($type == 'supplier') {
@@ -850,17 +860,21 @@ class AccountingAccount extends CommonObject
 
 			// Level 3 (define $code_t): Search suggested account for this thirdparty (similar code exists in page index.php to make automatic binding)
 			if (!empty($conf->global->ACCOUNTANCY_USE_PRODUCT_ACCOUNT_ON_THIRDPARTY)) {
-				if (!empty($buyer->code_compta)) {
-					$code_t = $buyer->code_compta;
+				if (!empty($buyer->code_compta_product)) {
+					$code_t = $buyer->code_compta_product;
 					$suggestedid = $accountingAccount['thirdparty'];
-					$suggestedaccountingaccountfor = 'thridparty';
+					$suggestedaccountingaccountfor = 'thirdparty';
 				}
 			}
 
 			// Manage Deposit
 			if ($factureDet->desc == "(DEPOSIT)" || $facture->type == $facture::TYPE_DEPOSIT) {
 				$accountdeposittoventilated = new self($this->db);
-				$result = $accountdeposittoventilated->fetch('', $conf->global->ACCOUNTING_ACCOUNT_CUSTOMER_DEPOSIT, 1);
+				if ($type=='customer') {
+					$result = $accountdeposittoventilated->fetch('', $conf->global->ACCOUNTING_ACCOUNT_CUSTOMER_DEPOSIT, 1);
+				} elseif ($type=='supplier') {
+					$result = $accountdeposittoventilated->fetch('', $conf->global->ACCOUNTING_ACCOUNT_SUPPLIER_DEPOSIT, 1);
+				}
 				if ($result < 0) {
 					return -1;
 				}

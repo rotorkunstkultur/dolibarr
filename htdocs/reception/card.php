@@ -57,7 +57,7 @@ if ((!empty($conf->fournisseur->enabled) && empty($conf->global->MAIN_USE_NEW_SU
 if (!empty($conf->productbatch->enabled)) {
 	require_once DOL_DOCUMENT_ROOT.'/product/class/productbatch.class.php';
 }
-if (!empty($conf->projet->enabled)) {
+if (!empty($conf->project->enabled)) {
 	require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
 	require_once DOL_DOCUMENT_ROOT.'/core/class/html.formprojet.class.php';
 }
@@ -101,11 +101,13 @@ $hidedesc = (GETPOST('hidedesc', 'int') ? GETPOST('hidedesc', 'int') : (!empty($
 $hideref = (GETPOST('hideref', 'int') ? GETPOST('hideref', 'int') : (!empty($conf->global->MAIN_GENERATE_DOCUMENTS_HIDE_REF) ? 1 : 0));
 
 $object = new Reception($db);
+$objectorder = new CommandeFournisseur($db);
 $extrafields = new ExtraFields($db);
 
 // fetch optionals attributes and labels
 $extrafields->fetch_name_optionals_label($object->table_element);
 $extrafields->fetch_name_optionals_label($object->table_element_line);
+$extrafields->fetch_name_optionals_label($objectorder->table_element_line);
 
 // Load object. Make an object->fetch
 include DOL_DOCUMENT_ROOT.'/core/actions_fetchobject.inc.php'; // Must be include, not include_once
@@ -210,6 +212,8 @@ if (empty($reshook)) {
 				$ret = $object->fetch($id); // Reload to get new records
 				$object->generateDocument($model, $outputlangs, $hidedetails, $hidedesc, $hideref);
 			}
+		} else {
+			setEventMessages($object->error, $object->errors, 'errors');
 		}
 	}
 
@@ -267,10 +271,10 @@ if (empty($reshook)) {
 		$object->origin = $origin;
 		$object->origin_id = $origin_id;
 		$object->fk_project = GETPOST('projectid', 'int');
-		$object->weight = GETPOST('weight', 'int') == '' ? "NULL" : GETPOST('weight', 'int');
-		$object->sizeH = GETPOST('sizeH', 'int') == '' ? "NULL" : GETPOST('sizeH', 'int');
-		$object->sizeW = GETPOST('sizeW', 'int') == '' ? "NULL" : GETPOST('sizeW', 'int');
-		$object->sizeS = GETPOST('sizeS', 'int') == '' ? "NULL" : GETPOST('sizeS', 'int');
+		$object->weight = GETPOST('weight', 'int') == '' ? null : GETPOST('weight', 'int');
+		$object->trueHeight = GETPOST('trueHeight', 'int') == '' ? null : GETPOST('trueHeight', 'int');
+		$object->trueWidth = GETPOST('trueWidth', 'int') == '' ? null : GETPOST('trueWidth', 'int');
+		$object->trueDepth = GETPOST('trueDepth', 'int') == '' ? null : GETPOST('trueDepth', 'int');
 		$object->size_units = GETPOST('size_units', 'int');
 		$object->weight_units = GETPOST('weight_units', 'int');
 
@@ -323,7 +327,6 @@ if (empty($reshook)) {
 			$stockLocation = "ent1".$i."_0";
 			$qty = "qtyl".$i;
 
-			//var_dump(GETPOST($qty,'int')); var_dump($_POST); var_dump($batch);exit;
 			//reception line for product with no batch management and no multiple stock location
 			if (GETPOST($qty, 'alpha') > 0) {
 				$totalqty += price2num(GETPOST($qty, 'alpha'), 'MS');
@@ -335,7 +338,6 @@ if (empty($reshook)) {
 
 
 		if ($totalqty > 0) {  // There is at least one thing to ship
-			//var_dump($_POST);exit;
 			for ($i = 1; $i <= $num; $i++) {
 				$lineToTest = '';
 				$lineId = GETPOST($idl, 'int');
@@ -350,8 +352,10 @@ if (empty($reshook)) {
 				}
 				$qty = "qtyl".$i;
 				$comment = "comment".$i;
-				$eatby = "dlc".$i;
-				$sellby = "dluo".$i;
+				// EATBY <-> DLUO see productbatch.class.php
+				// SELLBY <-> DLC
+				$eatby = "dluo".$i;
+				$sellby = "dlc".$i;
 				$batch = "batch".$i;
 				$cost_price = "cost_price".$i;
 
@@ -378,6 +382,7 @@ if (empty($reshook)) {
 					$sellby = GETPOST($sellby, 'alpha');
 					$eatbydate = str_replace('/', '-', $eatby);
 					$sellbydate = str_replace('/', '-', $sellby);
+
 					if (!empty($conf->global->STOCK_CALCULATE_ON_RECEPTION) || !empty($conf->global->STOCK_CALCULATE_ON_RECEPTION_CLOSE)) {
 						$ret = $object->addline($entrepot_id, GETPOST($idl, 'int'), GETPOST($qty, 'int'), $array_options[$i], GETPOST($comment, 'alpha'), strtotime($eatbydate), strtotime($sellbydate), GETPOST($batch, 'alpha'), price2num(GETPOST($cost_price, 'double'), 'MU'));
 					} else {
@@ -466,7 +471,6 @@ if (empty($reshook)) {
 				setEventMessages($object->error, $object->errors, 'errors');
 		}*/
 	} elseif ($action == 'setdate_livraison' && $permissiontoadd) {
-		//print "x ".$_POST['liv_month'].", ".$_POST['liv_day'].", ".$_POST['liv_year'];
 		$datedelivery = dol_mktime(GETPOST('liv_hour', 'int'), GETPOST('liv_min', 'int'), 0, GETPOST('liv_month', 'int'), GETPOST('liv_day', 'int'), GETPOST('liv_year', 'int'));
 
 		$object->fetch($id);
@@ -626,9 +630,11 @@ if (empty($reshook)) {
 						$batch = "batch".$line_id;
 						$dlc = "dlc".$line_id;
 						$dluo = "dluo".$line_id;
-						$eatby = GETPOST($dlc, 'alpha');
+						// EATBY <-> DLUO
+						$eatby = GETPOST($dluo, 'alpha');
 						$eatbydate = str_replace('/', '-', $eatby);
-						$sellby = GETPOST($dluo, 'alpha');
+						// SELLBY <-> DLC
+						$sellby = GETPOST($dlc, 'alpha');
 						$sellbydate = str_replace('/', '-', $sellby);
 						$line->batch = GETPOST($batch, 'alpha');
 						$line->eatby = strtotime($eatbydate);
@@ -639,8 +645,7 @@ if (empty($reshook)) {
 						setEventMessages($line->error, $line->errors, 'errors');
 						$error++;
 					}
-				} else // Product no predefined
-				{
+				} else { // Product no predefined
 					$qty = "qtyl".$line_id;
 					$line->id = $line_id;
 					$line->qty = GETPOST($qty, 'int');
@@ -693,7 +698,7 @@ if (empty($reshook)) {
 	$triggersendname = 'RECEPTION_SENTBYMAIL';
 	$paramname = 'id';
 	$mode = 'emailfromreception';
-	$trackid = 'shi'.$object->id;
+	$trackid = 'rec'.$object->id;
 	include DOL_DOCUMENT_ROOT.'/core/actions_sendmails.inc.php';
 }
 
@@ -707,7 +712,7 @@ llxHeader('', $langs->trans('Reception'), 'Reception');
 $form = new Form($db);
 $formfile = new FormFile($db);
 $formproduct = new FormProduct($db);
-if (!empty($conf->projet->enabled)) {
+if (!empty($conf->project->enabled)) {
 	$formproject = new FormProjets($db);
 }
 
@@ -792,7 +797,7 @@ if ($action == 'create') {
 			print '</tr>';
 
 			// Project
-			if (!empty($conf->projet->enabled)) {
+			if (!empty($conf->project->enabled)) {
 				$projectid = GETPOST('projectid', 'int') ?GETPOST('projectid', 'int') : 0;
 				if (empty($projectid) && !empty($objectsrc->fk_project)) {
 					$projectid = $objectsrc->fk_project;
@@ -846,9 +851,9 @@ if ($action == 'create') {
 			// Dim
 			print '<tr><td>';
 			print $langs->trans("Width").' x '.$langs->trans("Height").' x '.$langs->trans("Depth");
-			print ' </td><td colspan="3"><input name="sizeW" size="4" value="'.GETPOST('sizeW', 'int').'">';
-			print ' x <input name="sizeH" size="4" value="'.GETPOST('sizeH', 'int').'">';
-			print ' x <input name="sizeS" size="4" value="'.GETPOST('sizeS', 'int').'">';
+			print ' </td><td colspan="3"><input name="trueWidth" size="4" value="'.GETPOST('trueWidth', 'int').'">';
+			print ' x <input name="trueHeight" size="4" value="'.GETPOST('trueHeight', 'int').'">';
+			print ' x <input name="trueDepth" size="4" value="'.GETPOST('trueDepth', 'int').'">';
 			print ' ';
 			$text = $formproduct->selectMeasuringUnits("size_units", "size", GETPOST('size_units', 'int'), 0, 2);
 			$htmltext = $langs->trans("KeepEmptyForAutoCalculation");
@@ -956,10 +961,10 @@ if ($action == 'create') {
 					$ent = 'entrepot_' . $paramSuffix;
 					$pu = 'pu_' . $paramSuffix;
 					$lot = 'lot_number_' . $paramSuffix;
-					$dDLUO = dol_mktime(12, 0, 0, $_POST['dluo_'.$paramSuffix.'month'], $_POST['dluo_'.$paramSuffix.'day'], $_POST['dluo_'.$paramSuffix.'year']);
-					$dDLC = dol_mktime(12, 0, 0, $_POST['dlc_'.$paramSuffix.'month'], $_POST['dlc_'.$paramSuffix.'day'], $_POST['dlc_'.$paramSuffix.'year']);
+					$dDLUO = dol_mktime(12, 0, 0, GETPOST('dluo_'.$paramSuffix.'month', 'int'), GETPOST('dluo_'.$paramSuffix.'day', 'int'), GETPOST('dluo_'.$paramSuffix.'year', 'int'));
+					$dDLC = dol_mktime(12, 0, 0, GETPOST('dlc_'.$paramSuffix.'month', 'int'), GETPOST('dlc_'.$paramSuffix.'day', 'int'), GETPOST('dlc_'.$paramSuffix.'year', 'int'));
 					$fk_commandefourndet = 'fk_commandefourndet_'.$paramSuffix;
-					$dispatchLines[$numAsked] = array('prod' => GETPOST($prod, 'int'), 'qty' => price2num(GETPOST($qty), 'MS'), 'ent' =>GETPOST($ent, 'int'), 'pu' => price2num(GETPOST($pu), 'MU'), 'comment' =>GETPOST('comment'), 'fk_commandefourndet' => GETPOST($fk_commandefourndet, 'int'), 'DLC'=> $dDLC, 'DLUO'=> $dDLUO, 'lot'=> GETPOST($lot, 'alpha'));
+					$dispatchLines[$numAsked] = array('prod' => GETPOST($prod, 'int'), 'qty' => price2num(GETPOST($qty), 'MS'), 'ent' => GETPOST($ent, 'int'), 'pu' => price2num(GETPOST($pu), 'MU'), 'comment' => GETPOST('comment'), 'fk_commandefourndet' => GETPOST($fk_commandefourndet, 'int'), 'DLC'=> $dDLC, 'DLUO'=> $dDLUO, 'lot'=> GETPOST($lot, 'alpha'));
 				}
 
 				// If create form is coming from same page, it means that post was sent but an error occured
@@ -1026,7 +1031,7 @@ if ($action == 'create') {
 				print '<td class="center">'.$langs->trans("QtyReceived").'</td>';
 				print '<td class="center">'.$langs->trans("QtyToReceive");
 				if (!empty($conf->global->STOCK_CALCULATE_ON_RECEPTION || $conf->global->STOCK_CALCULATE_ON_RECEPTION_CLOSE)) {
-					print '<td>'.$langs->trans("ByingPrice").'</td>';
+					print '<td>'.$langs->trans("BuyingPrice").'</td>';
 				}
 				if (empty($conf->productbatch->enabled)) {
 					print ' <br>(<a href="#" id="autofill">'.$langs->trans("Fill").'</a>';
@@ -1048,9 +1053,17 @@ if ($action == 'create') {
 				print "</tr>\n";
 			}
 
+			// $objectsrc->lines contains the line of the purchase order
+			// $dispatchLines is list of lines with dispatching detail (with product, qty and warehouse). One purchase order line may have n of this dispatch lines.
+
+			$arrayofpurchaselinealreadyoutput= array();
+
+			// $_POST contains fk_commandefourndet_X_Y    where Y is num of product line and X is number of splitted line
 			$indiceAsked = 1;
-			while ($indiceAsked <= $numAsked) {
+			while ($indiceAsked <= $numAsked) {	// Loop on $dispatchLines. Warning: $dispatchLines must be sorted by fk_commandefourndet (it is a regroupment key on output)
 				$product = new Product($db);
+
+				// We search the purchase order line that is linked to the dispatchLines
 				foreach ($objectsrc->lines as $supplierLine) {
 					if ($dispatchLines[$indiceAsked]['fk_commandefourndet'] == $supplierLine->id) {
 						$line = $supplierLine;
@@ -1072,7 +1085,6 @@ if ($action == 'create') {
 				print '<!-- line fk_commandefourndet='.$line->id.' for product='.$line->fk_product.' -->'."\n";
 				print '<tr class="oddeven">'."\n";
 
-
 				// Product label
 				if ($line->fk_product > 0) {  // If predefined product
 					$product->fetch($line->fk_product);
@@ -1081,42 +1093,45 @@ if ($action == 'create') {
 
 					print '<td>';
 					print '<a name="'.$line->id.'"></a>'; // ancre pour retourner sur la ligne
-					print '<input type="hidden" name="productid'.$indiceAsked.'" value="'.$line->fk_product.'">';
+					if (! array_key_exists($line->id, $arrayofpurchaselinealreadyoutput)) {	// Add test to avoid to show qty twice
+						print '<input type="hidden" name="productid'.$indiceAsked.'" value="'.$line->fk_product.'">';
 
-					// Show product and description
-					$product_static = $product;
+						// Show product and description
+						$product_static = $product;
 
-					$text = $product_static->getNomUrl(1);
-					$text .= ' - '.(!empty($line->label) ? $line->label : $line->product_label);
-					$description = ($conf->global->PRODUIT_DESC_IN_FORM ? '' : dol_htmlentitiesbr($line->desc));
-					print $form->textwithtooltip($text, $description, 3, '', '', $i);
+						$text = $product_static->getNomUrl(1);
+						$text .= ' - '.(!empty($line->label) ? $line->label : $line->product_label);
+						$description = ($conf->global->PRODUIT_DESC_IN_FORM ? '' : dol_htmlentitiesbr($line->desc));
+						print $form->textwithtooltip($text, $description, 3, '', '', $i);
 
-					// Show range
-					print_date_range($db->jdate($line->date_start), $db->jdate($line->date_end));
+						// Show range
+						print_date_range($db->jdate($line->date_start), $db->jdate($line->date_end));
 
-					// Add description in form
-					if (!empty($conf->global->PRODUIT_DESC_IN_FORM)) {
-						print ($line->desc && $line->desc != $line->product_label) ? '<br>'.dol_htmlentitiesbr($line->desc) : '';
+						// Add description in form
+						if (!empty($conf->global->PRODUIT_DESC_IN_FORM)) {
+							print ($line->desc && $line->desc != $line->product_label) ? '<br>'.dol_htmlentitiesbr($line->desc) : '';
+						}
 					}
-
 					print '</td>';
 				} else {
 					print "<td>";
-					if ($type == 1) {
-						$text = img_object($langs->trans('Service'), 'service');
-					} else {
-						$text = img_object($langs->trans('Product'), 'product');
-					}
+					if (! array_key_exists($line->id, $arrayofpurchaselinealreadyoutput)) {	// Add test to avoid to show qty twice
+						if ($type == 1) {
+							$text = img_object($langs->trans('Service'), 'service');
+						} else {
+							$text = img_object($langs->trans('Product'), 'product');
+						}
 
-					if (!empty($line->label)) {
-						$text .= ' <strong>'.$line->label.'</strong>';
-						print $form->textwithtooltip($text, $line->desc, 3, '', '', $i);
-					} else {
-						print $text.' '.nl2br($line->desc);
-					}
+						if (!empty($line->label)) {
+							$text .= ' <strong>'.$line->label.'</strong>';
+							print $form->textwithtooltip($text, $line->desc, 3, '', '', $i);
+						} else {
+							print $text.' '.nl2br($line->desc);
+						}
 
-					// Show range
-					print_date_range($db->jdate($line->date_start), $db->jdate($line->date_end));
+						// Show range
+						print_date_range($db->jdate($line->date_start), $db->jdate($line->date_end));
+					}
 					print "</td>\n";
 				}
 
@@ -1127,8 +1142,11 @@ if ($action == 'create') {
 				print '<input type="text" class="maxwidth100" name="comment'.$indiceAsked.'" value="'.$defaultcomment.'">';
 				print '</td>';
 
-				// Qty
-				print '<td class="center">'.$line->qty;
+				// Qty in source purchase order line
+				print '<td class="center">';
+				if (! array_key_exists($line->id, $arrayofpurchaselinealreadyoutput)) {	// Add test to avoid to show qty twice
+					print $line->qty;
+				}
 				print '<input type="hidden" name="fk_commandefournisseurdet'.$indiceAsked.'" value="'.$line->id.'">';
 				print '<input type="hidden" name="pul'.$indiceAsked.'" value="'.$line->pu_ht.'">';
 				print '<input name="qtyasked'.$indiceAsked.'" id="qtyasked'.$indiceAsked.'" type="hidden" value="'.$line->qty.'">';
@@ -1138,7 +1156,9 @@ if ($action == 'create') {
 				// Qty already received
 				print '<td class="center">';
 				$quantityDelivered = $objectsrc->receptions[$line->id];
-				print $quantityDelivered;
+				if (! array_key_exists($line->id, $arrayofpurchaselinealreadyoutput)) {	// Add test to avoid to show qty twice
+					print $quantityDelivered;
+				}
 				print '<input name="qtydelivered'.$indiceAsked.'" id="qtydelivered'.$indiceAsked.'" type="hidden" value="'.$quantityDelivered.'">';
 				print '</td>';
 
@@ -1166,7 +1186,7 @@ if ($action == 'create') {
 							$defaultqty = GETPOST('qtyl'.$indiceAsked, 'int');
 						}
 						print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
-						print '<input name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" type="text" size="4" value="'.$deliverableQty.'">';
+						print '<input class="right" name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" type="text" size="4" value="'.$deliverableQty.'">';
 					} else {
 						print $langs->trans("NA");
 					}
@@ -1174,7 +1194,7 @@ if ($action == 'create') {
 
 					if (!empty($conf->global->STOCK_CALCULATE_ON_RECEPTION) || !empty($conf->global->STOCK_CALCULATE_ON_RECEPTION_CLOSE)) {
 						print '<td>';
-						print '<input name="cost_price'.$indiceAsked.'" id="cost_price'.$indiceAsked.'" value="'.$cost_price.'">';
+						print '<input class="width75 right" name="cost_price'.$indiceAsked.'" id="cost_price'.$indiceAsked.'" value="'.$cost_price.'">';
 						print '</td>';
 					}
 
@@ -1214,32 +1234,31 @@ if ($action == 'create') {
 						}
 					}
 				}
+
+				$arrayofpurchaselinealreadyoutput[$line->id] = $line->id;
+
 				print "</tr>\n";
 
-				$extralabelslines = $extrafields->attributes[$line->table_element];
-				//Display lines extrafields
-				if (is_array($extralabelslines) && count($extralabelslines) > 0) {
+				// Display lines for extrafields of the Reception line
+				// $line is a 'CommandeFournisseurLigne', $dispatchLines contains values of Reception lines so properties of CommandeFournisseurDispatch
+				if (!empty($extrafields)) {
+					//var_dump($line);
 					$colspan = 5;
-					if ($conf->productbatch->enabled) {
+					if (isModEnabled('productbatch')) {
 						$colspan += 3;
 					}
+					$recLine = new CommandeFournisseurDispatch($db);
 
 					$srcLine = new CommandeFournisseurLigne($db);
-					$line = new CommandeFournisseurDispatch($db);
-
-					$extrafields->fetch_name_optionals_label($srcLine->table_element);
-					$extrafields->fetch_name_optionals_label($line->table_element);
-
 					$srcLine->id = $line->id;
 					$srcLine->fetch_optionals(); // fetch extrafields also available in orderline
-					$line->fetch_optionals();
 
-					if (empty($line->array_options) && !empty($dispatchLines[$indiceAsked]['array_options'])) {
-						$line->array_options = $dispatchLines[$indiceAsked]['array_options'];
+					if (empty($recLine->array_options) && !empty($dispatchLines[$indiceAsked]['array_options'])) {
+						$recLine->array_options = $dispatchLines[$indiceAsked]['array_options'];
 					}
-					$line->array_options = array_merge($line->array_options, $srcLine->array_options);
+					$recLine->array_options = array_merge($recLine->array_options, $srcLine->array_options);
 
-					print $line->showOptionals($extrafields, 'edit', array('style'=>'class="oddeven"', 'colspan'=>$colspan), $indiceAsked);
+					print $recLine->showOptionals($extrafields, 'edit', array('style'=>'class="oddeven"', 'colspan'=>$colspan), $indiceAsked, '', 1);
 				}
 
 				$indiceAsked++;
@@ -1362,7 +1381,7 @@ if ($action == 'create') {
 		// Thirdparty
 		$morehtmlref .= '<br>'.$langs->trans('ThirdParty').' : '.$object->thirdparty->getNomUrl(1);
 		// Project
-		if (!empty($conf->projet->enabled)) {
+		if (!empty($conf->project->enabled)) {
 			$langs->load("projects");
 			$morehtmlref .= '<br>'.$langs->trans('Project').' ';
 			if (0) {    // Do not change on reception
@@ -1648,7 +1667,8 @@ if ($action == 'create') {
 		print '<br>';
 
 		print '<div class="div-table-responsive-no-min">';
-		print '<table class="noborder centpercent">';
+		print '<table id="tablelines" class="noborder centpercent">';
+		print '<thead>';
 		print '<tr class="liste_titre">';
 		// #
 		if (!empty($conf->global->MAIN_VIEW_LINE_NUMBER)) {
@@ -1713,6 +1733,7 @@ if ($action == 'create') {
 			print '<td class="linecoldelete" width="10"></td>';
 		}
 		print "</tr>\n";
+		print '</thead>';
 
 		$var = false;
 
@@ -1775,10 +1796,13 @@ if ($action == 'create') {
 			//var_dump($alreadysent);
 		}
 
-		// Loop on each product to send/sent
+		$arrayofpurchaselinealreadyoutput = array();
+
+		// Loop on each product to send/sent. Warning: $lines must be sorted by ->fk_commandefourndet (it is a regroupment key on output)
+		print '<tbody>';
 		for ($i = 0; $i < $num_prod; $i++) {
 			print '<!-- origin line id = '.(!empty($lines[$i]->origin_line_id) ? $lines[$i]->origin_line_id : 0).' -->'; // id of order line
-			print '<tr class="oddeven">';
+			print '<tr class="oddeven" id="row-'.$lines[$i]->id.'" data-id="'.$lines[$i]->id.'" data-element="'.$lines[$i]->element.'">';
 
 			// #
 			if (!empty($conf->global->MAIN_VIEW_LINE_NUMBER)) {
@@ -1796,33 +1820,36 @@ if ($action == 'create') {
 					$label = (!empty($lines[$i]->product->label) ? $lines[$i]->product->label : $lines[$i]->product->product_label);
 				}
 
-				print '<td>';
-
-				$text = $lines[$i]->product->getNomUrl(1);
-				$text .= ' - '.$label;
-				$description = (!empty($conf->global->PRODUIT_DESC_IN_FORM) ? '' : dol_htmlentitiesbr($lines[$i]->product->description));
-				print $form->textwithtooltip($text, $description, 3, '', '', $i);
-				print_date_range(!empty($lines[$i]->date_start) ? $lines[$i]->date_start : 0, !empty($lines[$i]->date_end) ? $lines[$i]->date_end : 0);
-				if (!empty($conf->global->PRODUIT_DESC_IN_FORM)) {
-					print (!empty($lines[$i]->product->description) && $lines[$i]->description != $lines[$i]->product->description) ? '<br>'.dol_htmlentitiesbr($lines[$i]->description) : '';
+				print '<td class="linecoldescription">';
+				if (!array_key_exists($lines[$i]->fk_commandefourndet, $arrayofpurchaselinealreadyoutput)) {
+					$text = $lines[$i]->product->getNomUrl(1);
+					$text .= ' - '.$label;
+					$description = (!empty($conf->global->PRODUIT_DESC_IN_FORM) ? '' : dol_htmlentitiesbr($lines[$i]->product->description));
+					print $form->textwithtooltip($text, $description, 3, '', '', $i);
+					print_date_range(!empty($lines[$i]->date_start) ? $lines[$i]->date_start : 0, !empty($lines[$i]->date_end) ? $lines[$i]->date_end : 0);
+					if (!empty($conf->global->PRODUIT_DESC_IN_FORM)) {
+						print (!empty($lines[$i]->product->description) && $lines[$i]->description != $lines[$i]->product->description) ? '<br>'.dol_htmlentitiesbr($lines[$i]->description) : '';
+					}
 				}
 				print "</td>\n";
 			} else {
-				print "<td>";
-				if ($lines[$i]->product_type == Product::TYPE_SERVICE) {
-					$text = img_object($langs->trans('Service'), 'service');
-				} else {
-					$text = img_object($langs->trans('Product'), 'product');
-				}
+				print '<td class="linecoldescription">';
+				if (!array_key_exists($lines[$i]->fk_commandefourndet, $arrayofpurchaselinealreadyoutput)) {
+					if ($lines[$i]->product_type == Product::TYPE_SERVICE) {
+						$text = img_object($langs->trans('Service'), 'service');
+					} else {
+						$text = img_object($langs->trans('Product'), 'product');
+					}
 
-				if (!empty($lines[$i]->label)) {
-					$text .= ' <strong>'.$lines[$i]->label.'</strong>';
-					print $form->textwithtooltip($text, $lines[$i]->description, 3, '', '', $i);
-				} else {
-					print $text.' '.nl2br($lines[$i]->description);
-				}
+					if (!empty($lines[$i]->label)) {
+						$text .= ' <strong>'.$lines[$i]->label.'</strong>';
+						print $form->textwithtooltip($text, $lines[$i]->description, 3, '', '', $i);
+					} else {
+						print $text.' '.nl2br($lines[$i]->description);
+					}
 
-				print_date_range($lines[$i]->date_start, $lines[$i]->date_end);
+					print_date_range($lines[$i]->date_start, $lines[$i]->date_end);
+				}
 				print "</td>\n";
 			}
 
@@ -1834,33 +1861,39 @@ if ($action == 'create') {
 
 
 			// Qty ordered
-			print '<td class="center">'.$lines[$i]->qty_asked.'</td>';
+			print '<td class="center linecolqty">';
+			if (!array_key_exists($lines[$i]->fk_commandefourndet, $arrayofpurchaselinealreadyoutput)) {
+				print $lines[$i]->qty_asked;
+			}
+			print '</td>';
 
 			// Qty in other receptions (with reception and warehouse used)
 			if ($origin && $origin_id > 0) {
-				print '<td class="center nowrap">';
-				foreach ($alreadysent as $key => $val) {
-					if ($lines[$i]->fk_commandefourndet == $key) {
-						$j = 0;
-						foreach ($val as $receptionline_id => $receptionline_var) {
-							if ($receptionline_var['reception_id'] == $lines[$i]->fk_reception) {
-								continue; // We want to show only "other receptions"
-							}
+				print '<td class="center nowrap linecolqtyinotherreceptions">';
+				if (!array_key_exists($lines[$i]->fk_commandefourndet, $arrayofpurchaselinealreadyoutput)) {
+					foreach ($alreadysent as $key => $val) {
+						if ($lines[$i]->fk_commandefourndet == $key) {
+							$j = 0;
+							foreach ($val as $receptionline_id => $receptionline_var) {
+								if ($receptionline_var['reception_id'] == $lines[$i]->fk_reception) {
+									continue; // We want to show only "other receptions"
+								}
 
-							$j++;
-							if ($j > 1) {
-								print '<br>';
-							}
-							$reception_static->fetch($receptionline_var['reception_id']);
-							print $reception_static->getNomUrl(1);
-							print ' - '.$receptionline_var['qty'];
+								$j++;
+								if ($j > 1) {
+									print '<br>';
+								}
+								$reception_static->fetch($receptionline_var['reception_id']);
+								print $reception_static->getNomUrl(1);
+								print ' - '.$receptionline_var['qty'];
 
-							$htmltext = $langs->trans("DateValidation").' : '.(empty($receptionline_var['date_valid']) ? $langs->trans("Draft") : dol_print_date($receptionline_var['date_valid'], 'dayhour'));
-							if (!empty($conf->stock->enabled) && $receptionline_var['warehouse'] > 0) {
-								$warehousestatic->fetch($receptionline_var['warehouse']);
-								$htmltext .= '<br>'.$langs->trans("From").' : '.$warehousestatic->getNomUrl(1, '', 0, 1);
+								$htmltext = $langs->trans("DateValidation").' : '.(empty($receptionline_var['date_valid']) ? $langs->trans("Draft") : dol_print_date($receptionline_var['date_valid'], 'dayhour'));
+								if (!empty($conf->stock->enabled) && $receptionline_var['warehouse'] > 0) {
+									$warehousestatic->fetch($receptionline_var['warehouse']);
+									$htmltext .= '<br>'.$langs->trans("From").' : '.$warehousestatic->getNomUrl(1, '', 0, 1);
+								}
+								print ' '.$form->textwithpicto('', $htmltext, 1);
 							}
-							print ' '.$form->textwithpicto('', $htmltext, 1);
 						}
 					}
 				}
@@ -1907,26 +1940,27 @@ if ($action == 'create') {
 				print '</table></td>';
 			} else {
 				// Qty to receive or received
-				print '<td class="center">'.$lines[$i]->qty.'</td>';
+				print '<td class="center linecolqtytoreceive">'.$lines[$i]->qty.'</td>';
 
 				// Warehouse source
 				if (!empty($conf->stock->enabled)) {
-					print '<td class="left">';
-
 					if ($lines[$i]->fk_entrepot > 0) {
 						$entrepot = new Entrepot($db);
 						$entrepot->fetch($lines[$i]->fk_entrepot);
-						print $entrepot->getNomUrl(1);
-					}
 
-					print '</td>';
+						print '<td class="left tdoverflowmax150" title="'.dol_escape_htmltag($entrepot->label).'">';
+						print $entrepot->getNomUrl(1);
+						print '</td>';
+					} else {
+						print '<td></td>';
+					}
 				}
 
 				// Batch number managment
 				if (!empty($conf->productbatch->enabled)) {
 					if (isset($lines[$i]->batch)) {
 						print '<!-- Detail of lot -->';
-						print '<td>';
+						print '<td class="linecolbatch">';
 						$detail = '';
 						if ($lines[$i]->product->status_batch) {
 							$detail .= $langs->trans("Batch").': '.$lines[$i]->batch;
@@ -1950,7 +1984,7 @@ if ($action == 'create') {
 			}
 
 			// Weight
-			print '<td class="center">';
+			print '<td class="center linecolweight">';
 			if (!empty($lines[$i]->fk_product_type) && $lines[$i]->fk_product_type == Product::TYPE_PRODUCT) {
 				print $lines[$i]->product->weight * $lines[$i]->qty.' '.measuringUnitString(0, "weight", $lines[$i]->product->weight_units);
 			} else {
@@ -1959,7 +1993,7 @@ if ($action == 'create') {
 			print '</td>';
 
 			// Volume
-			print '<td class="center">';
+			print '<td class="center linecolvolume">';
 			if (!empty($lines[$i]->fk_product_type) && $lines[$i]->fk_product_type == Product::TYPE_PRODUCT) {
 				print $lines[$i]->product->volume * $lines[$i]->qty.' '.measuringUnitString(0, "volume", $lines[$i]->product->volume_units);
 			} else {
@@ -1990,6 +2024,8 @@ if ($action == 'create') {
 			}
 			print "</tr>";
 
+			$arrayofpurchaselinealreadyoutput[$lines[$i]->fk_commandefourndet] = $lines[$i]->fk_commandefourndet;
+
 			// Display lines extrafields
 			$extralabelslines = $extrafields->attributes[$lines[$i]->table_element];
 			if (!empty($extralabelslines) && is_array($extralabelslines) && count($extralabelslines) > 0) {
@@ -2005,6 +2041,7 @@ if ($action == 'create') {
 				}
 			}
 		}
+		print '</tbody>';
 
 		// TODO Show also lines ordered but not delivered
 
@@ -2045,7 +2082,7 @@ if ($action == 'create') {
 			// TODO add alternative status
 			// 0=draft, 1=validated, 2=billed, we miss a status "delivered" (only available on order)
 			if ($object->statut == Reception::STATUS_CLOSED && $user->rights->reception->creer) {
-				if (!empty($conf->facture->enabled) && !empty($conf->global->WORKFLOW_BILL_ON_RECEPTION)) {  // Quand l'option est on, il faut avoir le bouton en plus et non en remplacement du Close ?
+				if (isModEnabled('facture') && !empty($conf->global->WORKFLOW_BILL_ON_RECEPTION)) {  // Quand l'option est on, il faut avoir le bouton en plus et non en remplacement du Close ?
 					print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("ClassifyUnbilled").'</a>';
 				} else {
 					print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("ReOpen").'</a>';

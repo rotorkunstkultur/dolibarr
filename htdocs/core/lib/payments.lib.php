@@ -173,19 +173,20 @@ function getValidOnlinePaymentMethods($paymentmethod = '')
  *
  * @param   string	$type		Type of URL ('free', 'order', 'invoice', 'contractline', 'member' ...)
  * @param	string	$ref		Ref of object
+ * @param	int		$amount		Amount of money to request for
  * @return	string				Url string
  */
-function showOnlinePaymentUrl($type, $ref)
+function showOnlinePaymentUrl($type, $ref, $amount = '9.99')
 {
 	global $langs;
 
 	// Load translation files required by the page
 	$langs->loadLangs(array('payment', 'stripe'));
 
-	$servicename = $langs->transnoentitiesnoconv('Online');
+	$servicename = '';	// Link is a generic link for all payments services (paypal, stripe, ...)
 
 	$out = img_picto('', 'globe').' <span class="opacitymedium">'.$langs->trans("ToOfferALinkForOnlinePayment", $servicename).'</span><br>';
-	$url = getOnlinePaymentUrl(0, $type, $ref);
+	$url = getOnlinePaymentUrl(0, $type, $ref, $amount);
 	$out .= '<div class="urllink"><input type="text" id="onlinepaymenturl" class="quatrevingtpercentminusx" value="'.$url.'">';
 	$out .= '<a class="" href="'.$url.'" target="_blank" rel="noopener noreferrer">'.img_picto('', 'globe', 'class="paddingleft"').'</a>';
 	$out .= '</div>';
@@ -199,11 +200,12 @@ function showOnlinePaymentUrl($type, $ref)
  * @param	string	$type		Type of URL ('free', 'order', 'invoice', 'contractline', 'member' ...)
  * @param	string	$ref		Ref of object
  * @param	string	$label		Text or HTML tag to display, if empty it display the URL
+ * @param	int		$amount		Amount of money to request for
  * @return	string			Url string
  */
-function getHtmlOnlinePaymentLink($type, $ref, $label = '')
+function getHtmlOnlinePaymentLink($type, $ref, $label = '', $amount = '9.99')
 {
-	$url = getOnlinePaymentUrl(0, $type, $ref);
+	$url = getOnlinePaymentUrl(0, $type, $ref, $amount);
 	$label = $label ? $label : $url;
 	return '<a href="'.$url.'" target="_blank" rel="noopener noreferrer">'.$label.'</a>';
 }
@@ -213,14 +215,14 @@ function getHtmlOnlinePaymentLink($type, $ref, $label = '')
  * Return string with full Url
  *
  * @param   int		$mode		      0=True url, 1=Url formated with colors
- * @param   string	$type		      Type of URL ('free', 'order', 'invoice', 'contractline', 'member' ...)
+ * @param   string	$type		      Type of URL ('free', 'order', 'invoice', 'contractline', 'member', 'boothlocation', ...)
  * @param	string	$ref		      Ref of object
- * @param	int		$amount		      Amount (required for $type='free' only)
- * @param	string	$freetag	      Free tag
+ * @param	int		$amount		      Amount of money to request for
+ * @param	string	$freetag	      Free tag (required and used for $type='free' only)
  * @param   string  $localorexternal  0=Url for browser, 1=Url for external access
  * @return	string				      Url string
  */
-function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag = 'your_tag', $localorexternal = 0)
+function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag = 'your_tag', $localorexternal = 1)
 {
 	global $conf, $dolibarr_main_url_root;
 
@@ -248,7 +250,7 @@ function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag
 		}
 		//if ($mode) $out.='&noidempotency=1';
 	} elseif ($type == 'order') {
-		$out = $urltouse.'/public/payment/newpayment.php?source=order&ref='.($mode ? '<span style="color: #666666">' : '');
+		$out = $urltouse.'/public/payment/newpayment.php?source='.$type.'&ref='.($mode ? '<span style="color: #666666">' : '');
 		if ($mode == 1) {
 			$out .= 'order_ref';
 		}
@@ -271,7 +273,7 @@ function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag
 			}
 		}
 	} elseif ($type == 'invoice') {
-		$out = $urltouse.'/public/payment/newpayment.php?source=invoice&ref='.($mode ? '<span style="color: #666666">' : '');
+		$out = $urltouse.'/public/payment/newpayment.php?source='.$type.'&ref='.($mode ? '<span style="color: #666666">' : '');
 		if ($mode == 1) {
 			$out .= 'invoice_ref';
 		}
@@ -294,7 +296,7 @@ function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag
 			}
 		}
 	} elseif ($type == 'contractline') {
-		$out = $urltouse.'/public/payment/newpayment.php?source=contractline&ref='.($mode ? '<span style="color: #666666">' : '');
+		$out = $urltouse.'/public/payment/newpayment.php?source='.$type.'&ref='.($mode ? '<span style="color: #666666">' : '');
 		if ($mode == 1) {
 			$out .= 'contractline_ref';
 		}
@@ -318,7 +320,9 @@ function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag
 		}
 	} elseif ($type == 'member' || $type == 'membersubscription') {
 		$newtype = 'member';
-		$out = $urltouse.'/public/payment/newpayment.php?source=member&ref='.($mode ? '<span style="color: #666666">' : '');
+		$out = $urltouse.'/public/payment/newpayment.php?source=member';
+		$out .= '&amount='.$amount;
+		$out .= '&ref='.($mode ? '<span style="color: #666666">' : '');
 		if ($mode == 1) {
 			$out .= 'member_ref';
 		}
@@ -340,9 +344,8 @@ function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag
 				$out .= ($mode ? '</span>' : '');
 			}
 		}
-	}
-	if ($type == 'donation') {
-		$out = $urltouse.'/public/payment/newpayment.php?source=donation&ref='.($mode ? '<span style="color: #666666">' : '');
+	} elseif ($type == 'donation') {
+		$out = $urltouse.'/public/payment/newpayment.php?source='.$type.'&ref='.($mode ? '<span style="color: #666666">' : '');
 		if ($mode == 1) {
 			$out .= 'donation_ref';
 		}
@@ -357,6 +360,29 @@ function getOnlinePaymentUrl($mode, $type, $ref = '', $amount = '9.99', $freetag
 				$out .= '&securekey='.($mode ? '<span style="color: #666666">' : '');
 				if ($mode == 1) {
 					$out .= "hash('".$conf->global->PAYMENT_SECURITY_TOKEN."' + '".$type."' + donation_ref)";
+				}
+				if ($mode == 0) {
+					$out .= dol_hash($conf->global->PAYMENT_SECURITY_TOKEN.$type.$ref, 2);
+				}
+				$out .= ($mode ? '</span>' : '');
+			}
+		}
+	} elseif ($type == 'boothlocation') {
+		$out = $urltouse.'/public/payment/newpayment.php?source='.$type.'&ref='.($mode ? '<span style="color: #666666">' : '');
+		if ($mode == 1) {
+			$out .= 'invoice_ref';
+		}
+		if ($mode == 0) {
+			$out .= urlencode($ref);
+		}
+		$out .= ($mode ? '</span>' : '');
+		if (!empty($conf->global->PAYMENT_SECURITY_TOKEN)) {
+			if (empty($conf->global->PAYMENT_SECURITY_TOKEN_UNIQUE)) {
+				$out .= '&securekey='.urlencode($conf->global->PAYMENT_SECURITY_TOKEN);
+			} else {
+				$out .= '&securekey='.($mode ? '<span style="color: #666666">' : '');
+				if ($mode == 1) {
+					$out .= "hash('".$conf->global->PAYMENT_SECURITY_TOKEN."' + '".$type."' + invoice_ref)";
 				}
 				if ($mode == 0) {
 					$out .= dol_hash($conf->global->PAYMENT_SECURITY_TOKEN.$type.$ref, 2);
@@ -439,9 +465,11 @@ function htmlPrintOnlinePaymentFooter($fromcompany, $langs, $addformmessage = 0,
 		$line2 .= ($line2 ? " - " : "").$langs->transnoentities("VATIntraShort").": ".$fromcompany->tva_intra;
 	}
 
+	print '<!-- htmlPrintOnlinePaymentFooter -->'."\n";
+
 	print '<br>';
 
-	print '<div class="center">'."\n";
+	print '<div class="center paddingleft paddingright">'."\n";
 	if ($addformmessage) {
 		print '<!-- object = '.$object->element.' -->';
 		print '<br>';

@@ -39,7 +39,7 @@ if (!defined('NOBROWSERNOTIF')) {
 
 // For MultiCompany module.
 // Do not use GETPOST here, function is not defined and define must be done before including main.inc.php
-// TODO This should be useless. Because entity must be retrieve from object ref and not from url.
+// Because 2 entities can have the same ref.
 $entity = (!empty($_GET['entity']) ? (int) $_GET['entity'] : (!empty($_POST['entity']) ? (int) $_POST['entity'] : 1));
 if (is_numeric($entity)) {
 	define("DOLENTITY", $entity);
@@ -48,12 +48,12 @@ if (is_numeric($entity)) {
 require '../../main.inc.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/payments.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
-require_once DOL_DOCUMENT_ROOT.'/comm/propal/class/propal.class.php';
 
 // Load translation files
-$langs->loadLangs(array("main", "other", "dict", "bills", "companies", "errors", "paybox","propal"));
+$langs->loadLangs(array("main", "other", "dict", "bills", "companies", "errors", "members", "paybox", "propal", "commercial"));
 
 // Security check
 // No check on module enabled. Done later according to $validpaymentmethod
@@ -61,6 +61,9 @@ $langs->loadLangs(array("main", "other", "dict", "bills", "companies", "errors",
 // Get parameters
 $action = GETPOST('action', 'aZ09');
 $cancel = GETPOST('cancel', 'alpha');
+$confirm = GETPOST('confirm', 'alpha');
+
+
 $refusepropal = GETPOST('refusepropal', 'alpha');
 $message = GETPOST('message', 'aZ09');
 
@@ -119,15 +122,24 @@ $urlko = preg_replace('/&$/', '', $urlko); // Remove last &
 
 $creditor = $mysoc->name;
 
-$object = new Propal($db);
-$object->fetch(0, $ref);
+$type = $source;
+if ($source == 'proposal') {
+	require_once DOL_DOCUMENT_ROOT.'/comm/propal/class/propal.class.php';
+	$object = new Propal($db);
+	$result= $object->fetch(0, $ref, '', $entity);
+} else {
+	accessforbidden('Bad value for source');
+	exit;
+}
+
 
 // Check securitykey
-$securekeyseed = $conf->global->PROPOSAL_ONLINE_SIGNATURE_SECURITY_TOKEN;
-$type = $source;
-$calculatedsecuritykey = dol_hash($securekeyseed.$type.$ref, '0');
+$securekeyseed = '';
+if ($source == 'proposal') {
+	$securekeyseed = getDolGlobalString('PROPOSAL_ONLINE_SIGNATURE_SECURITY_TOKEN');
+}
 
-if ($calculatedsecuritykey != $SECUREKEY) {
+if (!dol_verifyHash($securekeyseed.$type.$ref.(empty($conf->multicompany->enabled) ? '' : $entity), $SECUREKEY, '0')) {
 	http_response_code(403);
 	print 'Bad value for securitykey. Value provided '.dol_escape_htmltag($SECUREKEY).' does not match expected value for ref='.dol_escape_htmltag($ref);
 	exit(-1);
@@ -138,7 +150,7 @@ if ($calculatedsecuritykey != $SECUREKEY) {
  * Actions
  */
 
-if ($action == 'confirm_refusepropal') {
+if ($action == 'confirm_refusepropal' && $confirm == 'yes') {
 	$db->begin();
 
 	$sql  = "UPDATE ".MAIN_DB_PREFIX."propal";
@@ -181,11 +193,11 @@ $replacemainarea = (empty($conf->dol_hide_leftmenu) ? '<div>' : '').'<div>';
 llxHeader($head, $langs->trans("OnlineSignature"), '', '', 0, 0, '', '', '', 'onlinepaymentbody', $replacemainarea, 1);
 
 if ($action == 'refusepropal') {
-	print $form->formconfirm($_SERVER["PHP_SELF"].'?ref='.urlencode($ref).'&securekey='.urlencode($SECUREKEY), $langs->trans('RefusePropal'), $langs->trans('ConfirmRefusePropal', $object->ref), 'confirm_refusepropal', '', '', 1);
+	print $form->formconfirm($_SERVER["PHP_SELF"].'?ref='.urlencode($ref).'&securekey='.urlencode($SECUREKEY).($conf->multicompany->enabled?'&entity='.$entity:''), $langs->trans('RefusePropal'), $langs->trans('ConfirmRefusePropal', $object->ref), 'confirm_refusepropal', '', '', 1);
 }
 
-// Check link validity for param 'source'
-if (!empty($source) && in_array($ref, array('member_ref', 'contractline_ref', 'invoice_ref', 'order_ref', ''))) {
+// Check link validity for param 'source' to avoid use of the examples as value
+if (!empty($source) && in_array($ref, array('member_ref', 'contractline_ref', 'invoice_ref', 'order_ref', 'proposal_ref', ''))) {
 	$langs->load("errors");
 	dol_print_error_email('BADREFINONLINESIGNFORM', $langs->trans("ErrorBadLinkSourceSetButBadValueForRef", $source, $ref));
 	// End of page
@@ -203,6 +215,7 @@ print '<input type="hidden" name="tag" value="'.GETPOST("tag", 'alpha').'">'."\n
 print '<input type="hidden" name="suffix" value="'.GETPOST("suffix", 'alpha').'">'."\n";
 print '<input type="hidden" name="securekey" value="'.$SECUREKEY.'">'."\n";
 print '<input type="hidden" name="entity" value="'.$entity.'" />';
+print '<input type="hidden" name="page_y" value="" />';
 print "\n";
 print '<!-- Form to sign -->'."\n";
 
@@ -241,16 +254,15 @@ if ($urllogo) {
 	}
 	print '</div>';
 }
-if (!empty($conf->global->PROPOSAL_IMAGE_PUBLIC_SIGN)) {
+if ($source == 'proposal' && !empty($conf->global->PROPOSAL_IMAGE_PUBLIC_SIGN)) {
 	print '<div class="backimagepublicproposalsign">';
-	print '<img id="idEVENTORGANIZATION_IMAGE_PUBLIC_INTERFACE" src="'.$conf->global->PROPOSAL_IMAGE_PUBLIC_SIGN.'">';
+	print '<img id="idPROPOSAL_IMAGE_PUBLIC_INTERFACE" src="'.$conf->global->PROPOSAL_IMAGE_PUBLIC_SIGN.'">';
 	print '</div>';
 }
 
 // Output introduction text
 $text = '';
 if (!empty($conf->global->ONLINE_SIGN_NEWFORM_TEXT)) {
-	$langs->load("members");
 	$reg = array();
 	if (preg_match('/^\((.*)\)$/', $conf->global->ONLINE_SIGN_NEWFORM_TEXT, $reg)) {
 		$text .= $langs->trans($reg[1])."<br>\n";
@@ -278,19 +290,9 @@ if ($source == 'proposal') {
 	$found = true;
 	$langs->load("proposal");
 
-	require_once DOL_DOCUMENT_ROOT.'/comm/propal/class/propal.class.php';
-
-	$proposal = new Propal($db);
-	$result = $proposal->fetch('', $ref);
-	if ($result <= 0) {
-		$mesg = $proposal->error;
-		$error++;
-	} else {
-		$result = $proposal->fetch_thirdparty($proposal->socid);
-	}
+	$result = $object->fetch_thirdparty($object->socid);
 
 	// Creditor
-
 	print '<tr class="CTableRow2"><td class="CTableRow2">'.$langs->trans("Creditor");
 	print '</td><td class="CTableRow2">';
 	print img_picto('', 'company', 'class="pictofixedwidth"');
@@ -299,43 +301,69 @@ if ($source == 'proposal') {
 	print '</td></tr>'."\n";
 
 	// Debitor
-
 	print '<tr class="CTableRow2"><td class="CTableRow2">'.$langs->trans("ThirdParty");
 	print '</td><td class="CTableRow2">';
 	print img_picto('', 'company', 'class="pictofixedwidth"');
-	print '<b>'.$proposal->thirdparty->name.'</b>';
+	print '<b>'.$object->thirdparty->name.'</b>';
 	print '</td></tr>'."\n";
 
 	// Amount
-
 	print '<tr class="CTableRow2"><td class="CTableRow2">'.$langs->trans("Amount");
 	print '</td><td class="CTableRow2">';
-	print '<b>'.price($proposal->total_ttc, 0, $langs, 1, -1, -1, $conf->currency).'</b>';
+	print '<b>'.price($object->total_ttc, 0, $langs, 1, -1, -1, $conf->currency).'</b>';
 	print '</td></tr>'."\n";
 
 	// Object
-
-	$text = '<b>'.$langs->trans("SignatureProposalRef", $proposal->ref).'</b>';
-	print '<tr class="CTableRow2"><td class="CTableRow2 tdtop">'.$langs->trans("Designation");
+	$text = '<b>'.$langs->trans("SignatureProposalRef", $object->ref).'</b>';
+	print '<tr class="CTableRow2"><td class="CTableRow2">'.$langs->trans("Designation");
 	print '</td><td class="CTableRow2">'.$text;
-	if ($proposal->status == $proposal::STATUS_VALIDATED) {
-		$directdownloadlink = $proposal->getLastMainDocLink('proposal');
+
+	$last_main_doc_file = $object->last_main_doc;
+
+	if ($object->status == $object::STATUS_VALIDATED) {
+		if (empty($last_main_doc_file) || !dol_is_file(DOL_DATA_ROOT.'/'.$object->last_main_doc)) {
+			// It seems document has never been generated, or was generated and then deleted.
+			// So we try to regenerate it with its default template.
+			$defaulttemplate = '';		// We force the use an empty string instead of $object->model_pdf to be sure to use a "main" default template and not the last one used.
+			$object->generateDocument($defaulttemplate, $langs);
+		}
+
+		$directdownloadlink = $object->getLastMainDocLink('proposal');
 		if ($directdownloadlink) {
 			print '<br><a href="'.$directdownloadlink.'">';
-			print img_mime($proposal->last_main_doc, '');
+			print img_mime($object->last_main_doc, '');
 			print $langs->trans("DownloadDocument").'</a>';
 		}
 	} else {
-		/* TODO If the file of proposal signed is newer than the default proposal file, get link of proposal signed
+		if ($object->status == $object::STATUS_NOTSIGNED) {
+			$directdownloadlink = $object->getLastMainDocLink('proposal');
+			if ($directdownloadlink) {
+				print '<br><a href="'.$directdownloadlink.'">';
+				print img_mime($last_main_doc_file, '');
+				print $langs->trans("DownloadDocument").'</a>';
+			}
+		} elseif ($object->status == $object::STATUS_SIGNED || $object->status == $object::STATUS_BILLED) {
+			if (preg_match('/_signed-(\d+)/', $last_main_doc_file)) {	// If the last main doc has been signed
+				$last_main_doc_file_not_signed = preg_replace('/_signed-(\d+)/', '', $last_main_doc_file);
 
-		*/
+				$datefilesigned = dol_filemtime($last_main_doc_file);
+				$datefilenotsigned = dol_filemtime($last_main_doc_file_not_signed);
+
+				if (empty($datefilenotsigned) || $datefilesigned > $datefilenotsigned) {
+					$directdownloadlink = $object->getLastMainDocLink('proposal');
+					if ($directdownloadlink) {
+						print '<br><a href="'.$directdownloadlink.'">';
+						print img_mime($object->last_main_doc, '');
+						print $langs->trans("DownloadDocument").'</a>';
+					}
+				}
+			}
+		}
 	}
 
 	print '<input type="hidden" name="source" value="'.GETPOST("source", 'alpha').'">';
-	print '<input type="hidden" name="ref" value="'.$proposal->ref.'">';
+	print '<input type="hidden" name="ref" value="'.$object->ref.'">';
 	print '</td></tr>'."\n";
-
-	// TODO Add link to download PDF (similar code than for invoice)
 }
 
 
@@ -364,12 +392,14 @@ if ($action != 'dosign') {
 print '</td></tr>'."\n";
 print '<tr><td class="center">';
 
+
 if ($action == "dosign" && empty($cancel)) {
 	print '<div class="tablepublicpayment">';
 	print '<input type="button" class="buttonDelete small" id="clearsignature" value="'.$langs->trans("ClearSignature").'">';
 	print '<div id="signature" style="border:solid;"></div>';
 	print '</div>';
-	print '<input type="button" class="button" id="signpropal" value="'.$langs->trans("Sign").'">';
+	// Do not use class="reposition" here: It breaks the submit and there is a message on top to say it's ok, so going back top is better.
+	print '<input type="button" class="button" id="signbutton" value="'.$langs->trans("Sign").'">';
 	print '<input type="submit" class="button" name="cancel" value="'.$langs->trans("Cancel").'">';
 
 	// Add js code managed into the div #signature
@@ -380,9 +410,9 @@ if ($action == "dosign" && empty($cancel)) {
 
 	  $("#signature").on("change",function(){
 		$("#clearsignature").css("display","");
-		$("#signpropal").attr("disabled",false);
-		if(!$._data($("#signpropal")[0], "events")){
-			$("#signpropal").on("click",function(){
+		$("#signbutton").attr("disabled",false);
+		if(!$._data($("#signbutton")[0], "events")){
+			$("#signbutton").on("click",function(){
 				var signature = $("#signature").jSignature("getData", "image");
 				$.ajax({
 					type: "POST",
@@ -394,11 +424,12 @@ if ($action == "dosign" && empty($cancel)) {
 						"ref" : \''.dol_escape_js($REF).'\',
 						"securekey" : \''.dol_escape_js($SECUREKEY).'\',
 						"mode" : \''.dol_escape_htmltag($source).'\',
+						"entity" : \''.dol_escape_htmltag($entity).'\',
 					},
 					success: function(response) {
 						if(response == "success"){
 							console.log("Success on saving signature");
-							window.location.replace("'.$_SERVER["PHP_SELF"].'?ref='.urlencode($ref).'&message=signed&securekey='.urlencode($SECUREKEY).'");
+							window.location.replace("'.$_SERVER["PHP_SELF"].'?ref='.urlencode($ref).'&message=signed&securekey='.urlencode($SECUREKEY).($conf->multicompany->enabled?'&entity='.$entity:'').'");
 						}else{
 							console.error(response);
 						}
@@ -410,32 +441,32 @@ if ($action == "dosign" && empty($cancel)) {
 
 	  $("#clearsignature").on("click",function(){
 		$("#signature").jSignature("clear");
-		$("#signpropal").attr("disabled",true);
-		/* $("#clearsignature").css("display","none"); */
+		$("#signbutton").attr("disabled",true);
 	  });
 
-	  /* $("#clearsignature").css("display","none"); */
-	  $("#signpropal").attr("disabled",true);
+	  $("#signbutton").attr("disabled",true);
 	});
 	</script>';
 } else {
-	if ($object->status == $object::STATUS_SIGNED) {
-		print '<br>';
-		if ($message == 'signed') {
-			print '<span class="ok">'.$langs->trans("PropalSigned").'</span>';
+	if ($source == 'proposal') {
+		if ($object->status == $object::STATUS_SIGNED) {
+			print '<br>';
+			if ($message == 'signed') {
+				print '<span class="ok">'.$langs->trans("PropalSigned").'</span>';
+			} else {
+				print '<span class="ok">'.$langs->trans("PropalAlreadySigned").'</span>';
+			}
+		} elseif ($object->status == $object::STATUS_NOTSIGNED) {
+			print '<br>';
+			if ($message == 'refused') {
+				print '<span class="ok">'.$langs->trans("PropalRefused").'</span>';
+			} else {
+				print '<span class="warning">'.$langs->trans("PropalAlreadyRefused").'</span>';
+			}
 		} else {
-			print '<span class="ok">'.$langs->trans("PropalAlreadySigned").'</span>';
+			print '<input type="submit" class="butAction small wraponsmartphone marginbottomonly marginleftonly marginrightonly reposition" value="'.$langs->trans("SignPropal").'">';
+			print '<input name="refusepropal" type="submit" class="butActionDelete small wraponsmartphone marginbottomonly marginleftonly marginrightonly reposition" value="'.$langs->trans("RefusePropal").'">';
 		}
-	} elseif ($object->status == $object::STATUS_NOTSIGNED) {
-		print '<br>';
-		if ($message == 'refused') {
-			print '<span class="ok">'.$langs->trans("PropalRefused").'</span>';
-		} else {
-			print '<span class="warning">'.$langs->trans("PropalAlreadyRefused").'</span>';
-		}
-	} else {
-		print '<input type="submit" class="butAction small wraponsmartphone marginbottomonly marginleftonly marginrightonly reposition" value="'.$langs->trans("SignPropal").'">';
-		print '<input name="refusepropal" type="submit" class="butActionDelete small wraponsmartphone marginbottomonly marginleftonly marginrightonly" value="'.$langs->trans("RefusePropal").'">';
 	}
 }
 print '</td></tr>'."\n";

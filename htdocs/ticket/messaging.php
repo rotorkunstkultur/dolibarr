@@ -80,7 +80,6 @@ $permissiontoadd = $user->rights->ticket->write;
 
 // Security check
 $id = GETPOST("id", 'int');
-$socid = 0;
 if ($user->socid > 0) $socid = $user->socid;
 $result = restrictedArea($user, 'ticket', $object->id, '');
 
@@ -158,14 +157,17 @@ $morehtmlref .= $object->subject;
 if ($object->fk_user_create > 0) {
 	$morehtmlref .= '<br>'.$langs->trans("CreatedBy").' : ';
 
-	$langs->load("users");
 	$fuser = new User($db);
 	$fuser->fetch($object->fk_user_create);
 	$morehtmlref .= $fuser->getNomUrl(-1);
-}
-if (!empty($object->origin_email)) {
+} elseif (!empty($object->email_msgid)) {
 	$morehtmlref .= '<br>'.$langs->trans("CreatedBy").' : ';
-	$morehtmlref .= $object->origin_email.' <small>('.$langs->trans("TicketEmailOriginIssuer").')</small>';
+	$morehtmlref .= img_picto('', 'email', 'class="paddingrightonly"');
+	$morehtmlref .= dol_escape_htmltag($object->origin_email).' <small class="hideonsmartphone opacitymedium">('.$form->textwithpicto($langs->trans("CreatedByEmailCollector"), $langs->trans("EmailMsgID").': '.$object->email_msgid).')</small>';
+} elseif (!empty($object->origin_email)) {
+	$morehtmlref .= '<br>'.$langs->trans("CreatedBy").' : ';
+	$morehtmlref .= img_picto('', 'email', 'class="paddingrightonly"');
+	$morehtmlref .= dol_escape_htmltag($object->origin_email).' <small class="hideonsmartphone opacitymedium">('.$langs->trans("CreatedByPublicPortal").')</small>';
 }
 
 // Thirdparty
@@ -183,7 +185,7 @@ if (!empty($conf->societe->enabled)) {
 }
 
 // Project
-if (!empty($conf->projet->enabled)) {
+if (!empty($conf->project->enabled)) {
 	$langs->load("projects");
 	$morehtmlref .= '<br>'.$langs->trans('Project');
 	if ($user->rights->ticket->write) {
@@ -204,6 +206,7 @@ if (!empty($conf->projet->enabled)) {
 		}
 	} else {
 		if (!empty($object->fk_project)) {
+			require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
 			$proj = new Project($db);
 			$proj->fetch($object->fk_project);
 			$morehtmlref .= $proj->getNomUrl(1);
@@ -238,7 +241,7 @@ if (!empty($object->id)) {
 	$messagingUrl = DOL_URL_ROOT.'/ticket/messaging.php?track_id='.$object->track_id;
 	$morehtmlright .= dolGetButtonTitle($langs->trans('ShowAsConversation'), '', 'fa fa-comments imgforviewmode', $messagingUrl, '', 1, array('morecss'=>'btnTitleSelected'));
 	$messagingUrl = DOL_URL_ROOT.'/ticket/agenda.php?track_id='.$object->track_id;
-	$morehtmlright .= dolGetButtonTitle($langs->trans('MessageListViewType'), '', 'fa fa-list-alt imgforviewmode', $messagingUrl, '', 1);
+	$morehtmlright .= dolGetButtonTitle($langs->trans('MessageListViewType'), '', 'fa fa-bars imgforviewmode', $messagingUrl, '', 1);
 
 
 	// Show link to add a message (if read and not closed)

@@ -327,7 +327,7 @@ if (!empty($withproject)) {
 	print '</td></tr>';
 
 	// Categories
-	if ($conf->categorie->enabled) {
+	if (isModEnabled('categorie')) {
 		print '<tr><td class="valignmiddle">'.$langs->trans("Categories").'</td><td>';
 		print $form->showCategories($projectstatic->id, 'project', 1);
 		print "</td></tr>";
@@ -519,7 +519,7 @@ if ($object->id > 0 && (empty($action) || ($action != 'edit' && $action != 'crea
 		$moreparam .= '&fk_project='.((int) $fk_project);
 	}
 
-	$head = conferenceorboothattendeePrepareHead($object);
+	$head = conferenceorboothAttendeePrepareHead($object);
 	print dol_get_fiche_head($head, 'card', $langs->trans("ConferenceOrBoothAttendee"), -1, $object->picto);
 
 	$formconfirm = '';
