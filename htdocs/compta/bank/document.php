@@ -50,8 +50,8 @@ if ($user->socid) {
 
 // Get parameters
 $limit = GETPOST('limit', 'int') ? GETPOST('limit', 'int') : $conf->liste_limit;
-$sortfield = GETPOST("sortfield", 'alpha');
-$sortorder = GETPOST("sortorder", 'alpha');
+$sortfield = GETPOST('sortfield', 'aZ09comma');
+$sortorder = GETPOST('sortorder', 'aZ09comma');
 $page = GETPOSTISSET('pageplusone') ? (GETPOST('pageplusone') - 1) : GETPOST("page", 'int');
 if (empty($page) || $page == -1) {
 	$page = 0;
@@ -93,8 +93,7 @@ include DOL_DOCUMENT_ROOT.'/core/actions_linkedfiles.inc.php';
  * View
  */
 
-$title = $langs->trans("FinancialAccount").' - '.$langs->trans("Documents");
-
+$title = $object->ref.' - '.$langs->trans("Documents");
 $help_url = "EN:Module_Banks_and_Cash|FR:Module_Banques_et_Caisses";
 
 llxHeader("", $title, $help_url);

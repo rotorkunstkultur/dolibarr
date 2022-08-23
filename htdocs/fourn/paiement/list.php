@@ -35,8 +35,10 @@
 
 require '../../main.inc.php';
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/paiementfourn.class.php';
+require_once DOL_DOCUMENT_ROOT.'/compta/bank/class/account.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formother.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/accountancy/class/accountingjournal.class.php';
 
 // Load translation files required by the page
 $langs->loadLangs(array('companies', 'bills', 'banks', 'compta'));
@@ -67,8 +69,8 @@ $search_bank_account	= GETPOST('search_bank_account', 'int');
 $search_amount			= GETPOST('search_amount', 'alpha'); // alpha because we must be able to search on '< x'
 
 $limit = GETPOST('limit', 'int') ? GETPOST('limit', 'int') : $conf->liste_limit;
-$sortfield				= GETPOST('sortfield', 'alpha');
-$sortorder				= GETPOST('sortorder', 'alpha');
+$sortfield				= GETPOST('sortfield', 'aZ09comma');
+$sortorder				= GETPOST('sortorder', 'aZ09comma');
 $page = GETPOSTISSET('pageplusone') ? (GETPOST('pageplusone') - 1) : GETPOST('page', 'int');
 
 if (empty($page) || $page == -1) {
@@ -170,13 +172,14 @@ llxHeader('', $langs->trans('ListPayment'));
 
 $form = new Form($db);
 $formother = new FormOther($db);
+$accountstatic = new Account($db);
 $companystatic = new Societe($db);
 $paymentfournstatic = new PaiementFourn($db);
 
 $sql = 'SELECT p.rowid, p.ref, p.datep, p.amount as pamount, p.num_paiement';
 $sql .= ', s.rowid as socid, s.nom as name, s.email';
 $sql .= ', c.code as paiement_type, c.libelle as paiement_libelle';
-$sql .= ', ba.rowid as bid, ba.label';
+$sql .= ', ba.rowid as bid, ba.ref as bref, ba.label as blabel, ba.number, ba.account_number as account_number, ba.iban_prefix, ba.bic, ba.currency_code, ba.fk_accountancy_journal as accountancy_journal';
 if (empty($user->rights->societe->client->voir)) {
 	$sql .= ', sc.fk_soc, sc.fk_user';
 }
@@ -232,7 +235,8 @@ if ($search_all) {
 // Add where from extra fields
 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_sql.tpl.php';
 
-$sql .= ' GROUP BY p.rowid, p.ref, p.datep, p.amount, p.num_paiement, s.rowid, s.nom, s.email, c.code, c.libelle, ba.rowid, ba.label';
+$sql .= ' GROUP BY p.rowid, p.ref, p.datep, p.amount, p.num_paiement, s.rowid, s.nom, s.email, c.code, c.libelle,';
+$sql .= ' ba.rowid, ba.ref, ba.label, ba.number, ba.account_number, ba.iban_prefix, ba.bic, ba.currency_code, ba.fk_accountancy_journal';
 if (empty($user->rights->societe->client->voir)) {
 	$sql .= ', sc.fk_soc, sc.fk_user';
 }
@@ -481,7 +485,7 @@ while ($i < min($num, $limit)) {
 
 	// No
 	if (!empty($conf->global->MAIN_VIEW_LINE_NUMBER_IN_LIST)) {
-		print '<td>'.(($offset * $limit) + $i).'</td>';
+		print '<td class="nowraponall">'.(($offset * $limit) + $i).'</td>';
 		if (!$i) {
 			$totalarray['nbfield']++;
 		}
@@ -489,7 +493,7 @@ while ($i < min($num, $limit)) {
 
 	// Ref
 	if (!empty($arrayfields['p.ref']['checked'])) {
-		print '<td class="nowrap">'.$paymentfournstatic->getNomUrl(1).'</td>';
+		print '<td class="nowraponall">'.$paymentfournstatic->getNomUrl(1).'</td>';
 		if (!$i) {
 			$totalarray['nbfield']++;
 		}
@@ -506,7 +510,7 @@ while ($i < min($num, $limit)) {
 
 	// Thirdparty
 	if (!empty($arrayfields['s.nom']['checked'])) {
-		print '<td>';
+		print '<td class="tdoverflowmax125">';
 		if ($objp->socid > 0) {
 			print $companystatic->getNomUrl(1, '', 24);
 		}
@@ -533,11 +537,24 @@ while ($i < min($num, $limit)) {
 		}
 	}
 
-	// Account
+	// Bank account
 	if (!empty($arrayfields['ba.label']['checked'])) {
-		print '<td>';
+		print '<td class="tdoverflowmax125">';
 		if ($objp->bid) {
-			print '<a href="'.DOL_URL_ROOT.'/compta/bank/bankentries_list.php?account='.$objp->bid.'">'.img_object($langs->trans("ShowAccount"), 'account').' '.dol_trunc($objp->label, 24).'</a>';
+			$accountstatic->id = $objp->bid;
+			$accountstatic->ref = $objp->bref;
+			$accountstatic->label = $objp->blabel;
+			$accountstatic->number = $objp->number;
+			$accountstatic->iban = $objp->iban_prefix;
+			$accountstatic->bic = $objp->bic;
+			$accountstatic->currency_code = $objp->currency_code;
+			$accountstatic->account_number = $objp->account_number;
+
+			$accountingjournal = new AccountingJournal($db);
+			$accountingjournal->fetch($objp->accountancy_journal);
+			$accountstatic->accountancy_journal = $accountingjournal->code;
+
+			print $accountstatic->getNomUrl(1);
 		} else {
 			print '&nbsp;';
 		}

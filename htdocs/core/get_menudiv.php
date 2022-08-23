@@ -121,12 +121,22 @@ print '
         display: none;
     }
 
-    a.alilevel0 {
+	ul li.lilevel2 {
+		padding-left: 42px;
+	}
+
+    a.alilevel0, span.spanlilevel0 {
         background-image: url(\''.DOL_URL_ROOT.'/theme/'.urlencode($conf->theme).'/img/next.png\') !important;
-        background-repeat: no-repeat !important;
-        background-position-x: 10px;
+        background-repeat: no-repeat !important;';
+if ($langs->trans("DIRECTION") == 'rtl') {
+	print 'background-position: right;';
+} else {
+	print 'background-position-x: 10px;';
+}
+	print '
         background-position-y: 16px;
         padding: 1em 15px 1em 40px;
+		display: block;
     }
     li.lilevel0 font.vsmenudisabled {
         background-repeat: no-repeat !important;
@@ -151,6 +161,18 @@ print '
     li.lilevel1 a {
         padding-bottom: 5px;
     }
+	li.lilevel1 > a, li.lilevel1 > i {
+        /* background-image: url(\''.DOL_URL_ROOT.'/theme/'.urlencode($conf->theme).'/img/puce.png\') !important; */
+        background-repeat: no-repeat !important;';
+if ($langs->trans("DIRECTION") == 'rtl') {
+	print 'background-position: right;';
+} else {
+	print 'background-position-x: 10px;';
+}
+	print 'background-position-y: 1px;';
+	print 'padding-left: 20px;';
+	print '
+	}
     li.lilevel1 a, li.lilevel1 {
         color: #000;
         cursor: pointer;

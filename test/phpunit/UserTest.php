@@ -143,11 +143,13 @@ class UserTest extends PHPUnit\Framework\TestCase
 		$langs=$this->savlangs;
 		$db=$this->savdb;
 
+		print __METHOD__." USER_PASSWORD_GENERATED=".getDolGlobalString('USER_PASSWORD_GENERATED')."\n";
+
 		$localobject=new User($this->savdb);
 		$localobject->initAsSpecimen();
 		$result=$localobject->create($user);
 
-		$this->assertLessThan($result, 0);
+		$this->assertLessThan($result, 0, 'Creation of user has failed: '.$localobject->error);
 		print __METHOD__." result=".$result."\n";
 		return $result;
 	}
@@ -202,7 +204,7 @@ class UserTest extends PHPUnit\Framework\TestCase
 		$newlocalobject=new User($this->savdb);
 		$newlocalobject->initAsSpecimen();
 		$this->changeProperties($newlocalobject);
-		$this->assertEquals($this->objCompare($localobject, $newlocalobject, true, array('id','socid','societe_id','specimen','note','ref','pass','pass_indatabase','pass_indatabase_crypted','pass_temp','datec','datem','datelastlogin','datepreviouslogin','trackid')), array());    // Actual, Expected
+		$this->assertEquals($this->objCompare($localobject, $newlocalobject, true, array('id','socid','societe_id','specimen','note','ref','pass','pass_indatabase','pass_indatabase_crypted','pass_temp','datec','datem','datelastlogin','datepreviouslogin','iplastlogin','ippreviouslogin','trackid')), array());    // Actual, Expected
 
 		return $localobject;
 	}
@@ -260,11 +262,39 @@ class UserTest extends PHPUnit\Framework\TestCase
 	}
 
 	/**
+	 * testUserHasRight
+	 * @param	User  $localobject		 User
+	 * @return  User  $localobject		 User
+	 * @depends testUserOther
+	 */
+	public function testUserHasRight($localobject)
+	{
+		global $conf,$user,$langs,$db;
+		$conf=$this->savconf;
+		$user=$this->savuser;
+		$langs=$this->savlangs;
+		$db=$this->savdb;
+		/*$result=$localobject->setstatus(0);
+		print __METHOD__." id=".$localobject->id." result=".$result."\n";
+		$this->assertLessThan($result, 0);
+		*/
+
+		print __METHOD__." id=". $localobject->id ."\n";
+		//$this->assertNotEquals($user->date_creation, '');
+		$localobject->addrights(0, 'supplier_proposal');
+		$this->assertEquals($localobject->hasRight('member', ''), 0);
+		$this->assertEquals($localobject->hasRight('member', 'member'), 0);$this->assertEquals($localobject->hasRight('product', 'member', 'read'), 0);
+		$this->assertEquals($localobject->hasRight('member', 'member'), 0);$this->assertEquals($localobject->hasRight('produit', 'member', 'read'), 0);
+
+		return $localobject;
+	}
+
+	/**
 	 * testUserSetPassword
 	 *
 	 * @param   User  $localobject     User
 	 * @return  void
-	 * @depends testUserOther
+	 * @depends testUserHasRight
 	 * The depends says test is run only if previous is ok
 	 */
 	public function testUserSetPassword($localobject)

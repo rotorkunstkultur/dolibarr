@@ -58,8 +58,8 @@ $hookmanager->initHooks(array('productlotdocuments'));
 
 // Get parameters
 $limit = GETPOST('limit', 'int') ? GETPOST('limit', 'int') : $conf->liste_limit;
-$sortfield = GETPOST("sortfield", 'alpha');
-$sortorder = GETPOST("sortorder", 'alpha');
+$sortfield = GETPOST('sortfield', 'aZ09comma');
+$sortorder = GETPOST('sortorder', 'aZ09comma');
 $page = GETPOSTISSET('pageplusone') ? (GETPOST('pageplusone') - 1) : GETPOST("page", 'int');
 if (empty($page) || $page == -1) {
 	$page = 0;
@@ -83,10 +83,16 @@ if ($id || $ref) {
 		$batch = $tmp[1];
 	}
 	$object->fetch($id, $productid, $batch);
-	$object->ref = $object->batch; // For document management ( it use $object->ref)
+	$object->ref = $object->batch; // Old system for document management ( it uses $object->ref)
 
 	if (!empty($conf->productbatch->enabled)) {
 		$upload_dir = $conf->productbatch->multidir_output[$object->entity].'/'.get_exdir(0, 0, 0, 1, $object, $modulepart);
+		$filearray = dol_dir_list($upload_dir, "files");
+		if (empty($filearray)) {
+			// If no files linked yet, use new system on lot id. (Batch is not unique and can be same on different product)
+			$object->fetch($id, $productid, $batch);
+			$upload_dir = $conf->productbatch->multidir_output[$object->entity].'/'.get_exdir(0, 0, 0, 1, $object, $modulepart);
+		}
 	}
 }
 

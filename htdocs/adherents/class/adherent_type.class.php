@@ -94,8 +94,19 @@ class AdherentType extends CommonObject
 	 */
 	public $amount;
 
-	/** @var string 	Public note */
+	/**
+	 * @var int Amount can be choosen by the visitor during subscription (0 or 1)
+	 */
+	public $caneditamount;
+
+	/**
+	 * @var string 	Public note
+	 * @deprecated
+	 */
 	public $note;
+
+	/** @var string 	Public note */
+	public $note_public;
 
 	/** @var integer	Can vote */
 	public $vote;
@@ -114,6 +125,9 @@ class AdherentType extends CommonObject
 
 	/** @var array Array of members */
 	public $members = array();
+
+	/** @var string string other */
+	public $other = array();
 
 	public $multilangs = array();
 
@@ -265,7 +279,7 @@ class AdherentType extends CommonObject
 		$result = $this->db->query($sql);
 		if ($result) {
 			// Call trigger
-			$result = $this->call_trigger('ADHERENT_TYPE_DEL_MULTILANGS', $user);
+			$result = $this->call_trigger('MEMBER_TYPE_DEL_MULTILANGS', $user);
 			if ($result < 0) {
 				$this->error = $this->db->lasterror();
 				dol_syslog(get_class($this).'::delMultiLangs error='.$this->error, LOG_ERR);
@@ -358,6 +372,10 @@ class AdherentType extends CommonObject
 
 		$this->label = trim($this->label);
 
+		if (empty($this->note_public) && !empty($this->note)) {		// For backward compatibility
+			$this->note_public = $this->note;
+		}
+
 		$this->db->begin();
 
 		$sql = "UPDATE ".MAIN_DB_PREFIX."adherent_type ";
@@ -367,15 +385,16 @@ class AdherentType extends CommonObject
 		$sql .= "morphy = '".$this->db->escape($this->morphy)."',";
 		$sql .= "subscription = '".$this->db->escape($this->subscription)."',";
 		$sql .= "amount = ".((empty($this->amount) && $this->amount == '') ? 'null' : ((float) $this->amount)).",";
+		$sql .= "caneditamount = ".((int) $this->caneditamount).",";
 		$sql .= "duration = '".$this->db->escape($this->duration_value.$this->duration_unit)."',";
-		$sql .= "note = '".$this->db->escape($this->note)."',";
+		$sql .= "note = '".$this->db->escape($this->note_public)."',";
 		$sql .= "vote = ".(integer) $this->db->escape($this->vote).",";
 		$sql .= "mail_valid = '".$this->db->escape($this->mail_valid)."'";
 		$sql .= " WHERE rowid =".((int) $this->id);
 
 		$result = $this->db->query($sql);
 		if ($result) {
-			$this->description = $this->db->escape($this->note);
+			$this->description = $this->db->escape($this->note_public);
 
 			// Multilangs
 			if (!empty($conf->global->MAIN_MULTILANGS)) {
@@ -421,6 +440,7 @@ class AdherentType extends CommonObject
 
 	/**
 	 *	Function to delete the member's status
+	 *  TODO Add param "User $user"
 	 *
 	 *  @return		int		> 0 if OK, 0 if not found, < 0 if KO
 	 */
@@ -461,7 +481,7 @@ class AdherentType extends CommonObject
 	{
 		global $langs, $conf;
 
-		$sql = "SELECT d.rowid, d.libelle as label, d.morphy, d.statut as status, d.duration, d.subscription, d.amount, d.mail_valid, d.note, d.vote";
+		$sql = "SELECT d.rowid, d.libelle as label, d.morphy, d.statut as status, d.duration, d.subscription, d.amount, d.caneditamount, d.mail_valid, d.note as note_public, d.vote";
 		$sql .= " FROM ".MAIN_DB_PREFIX."adherent_type as d";
 		$sql .= " WHERE d.rowid = ".(int) $rowid;
 
@@ -482,8 +502,10 @@ class AdherentType extends CommonObject
 				$this->duration_unit  = substr($obj->duration, -1);
 				$this->subscription   = $obj->subscription;
 				$this->amount         = $obj->amount;
+				$this->caneditamount  = $obj->caneditamount;
 				$this->mail_valid     = $obj->mail_valid;
-				$this->note           = $obj->note;
+				$this->note           = $obj->note_public;	// deprecated
+				$this->note_public    = $obj->note_public;
 				$this->vote           = $obj->vote;
 
 				// multilangs
@@ -792,12 +814,16 @@ class AdherentType extends CommonObject
 		// Object classes
 		$info["objectclass"] = explode(',', $conf->global->LDAP_MEMBER_TYPE_OBJECT_CLASS);
 
+		if (empty($this->note_public) && !empty($this->note)) {		// For backward compatibility
+			$this->note_public = $this->note;
+		}
+
 		// Champs
 		if ($this->label && !empty($conf->global->LDAP_MEMBER_TYPE_FIELD_FULLNAME)) {
 			$info[$conf->global->LDAP_MEMBER_TYPE_FIELD_FULLNAME] = $this->label;
 		}
-		if ($this->note && !empty($conf->global->LDAP_MEMBER_TYPE_FIELD_DESCRIPTION)) {
-			$info[$conf->global->LDAP_MEMBER_TYPE_FIELD_DESCRIPTION] = dol_string_nohtmltag($this->note, 0, 'UTF-8', 1);
+		if ($this->note_public && !empty($conf->global->LDAP_MEMBER_TYPE_FIELD_DESCRIPTION)) {
+			$info[$conf->global->LDAP_MEMBER_TYPE_FIELD_DESCRIPTION] = dol_string_nohtmltag($this->note_public, 0, 'UTF-8', 1);
 		}
 		if (!empty($conf->global->LDAP_MEMBER_TYPE_FIELD_GROUPMEMBERS)) {
 			$valueofldapfield = array();
@@ -829,9 +855,10 @@ class AdherentType extends CommonObject
 		$this->specimen = 1;
 
 		$this->label = 'MEMBERS TYPE SPECIMEN';
-		$this->note = 'This is a note';
+		$this->note_public = 'This is a public note';
 		$this->mail_valid = 'This is welcome email';
 		$this->subscription = 1;
+		$this->caneditamount = 0;
 		$this->vote = 0;
 
 		$this->status = 1;

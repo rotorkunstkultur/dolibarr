@@ -43,12 +43,16 @@ require_once DOL_DOCUMENT_ROOT.'/admin/dolistore/class/dolistore.class.php';
 // Load translation files required by the page
 $langs->loadLangs(array("errors", "admin", "modulebuilder"));
 
-$mode = GETPOSTISSET('mode') ? GETPOST('mode', 'alpha') : (empty($conf->global->MAIN_MODULE_SETUP_ON_LIST_BY_DEFAULT) ? 'commonkanban' : 'common');
-if (empty($mode)) {
-	$mode = 'common';
+// if we set another view list mode, we keep it (till we change one more time)
+if (GETPOSTISSET('mode')) {
+	$mode = GETPOST('mode', 'alpha');
+	if ($mode =='common' || $mode =='commonkanban')
+		dolibarr_set_const($db, "MAIN_MODULE_SETUP_ON_LIST_BY_DEFAULT", $mode, 'chaine', 0, '', $conf->entity);
+} else {
+	$mode = (empty($conf->global->MAIN_MODULE_SETUP_ON_LIST_BY_DEFAULT) ? 'commonkanban' : $conf->global->MAIN_MODULE_SETUP_ON_LIST_BY_DEFAULT);
 }
+
 $action = GETPOST('action', 'aZ09');
-//var_dump($_POST);exit;
 $value = GETPOST('value', 'alpha');
 $page_y = GETPOST('page_y', 'int');
 $search_keyword = GETPOST('search_keyword', 'alpha');
@@ -482,9 +486,9 @@ $deschelp  = '';
 if ($mode == 'common' || $mode == 'commonkanban') {
 	$desc = $langs->trans("ModulesDesc", '{picto}');
 	$desc .= ' '.$langs->trans("ModulesDesc2", '{picto2}');
-	$desc = str_replace('{picto}', img_picto('', 'switch_off'), $desc);
-	$desc = str_replace('{picto2}', img_picto('', 'setup'), $desc);
-	if (count($conf->modules) <= (empty($conf->global->MAIN_MIN_NB_ENABLED_MODULE_FOR_WARNING) ? 1 : $conf->global->MAIN_MIN_NB_ENABLED_MODULE_FOR_WARNING)) {	// If only minimal initial modules enabled
+	$desc = str_replace('{picto}', img_picto('', 'switch_off', 'class="size15x"'), $desc);
+	$desc = str_replace('{picto2}', img_picto('', 'setup', 'class="size15x"'), $desc);
+	if (!count($conf->modules) <= (empty($conf->global->MAIN_MIN_NB_ENABLED_MODULE_FOR_WARNING) ? 1 : $conf->global->MAIN_MIN_NB_ENABLED_MODULE_FOR_WARNING)) {	// If only minimal initial modules enabled
 		$deschelp = '<div class="info hideonsmartphone">'.$desc."<br></div><br>\n";
 	}
 }
@@ -529,18 +533,18 @@ if ($mode == 'common' || $mode == 'commonkanban') {
 	$moreforfilter .= '<div class="floatright right pagination paddingtop --module-list"><ul><li>';
 	$moreforfilter .= dolGetButtonTitle($langs->trans('CheckForModuleUpdate'), $langs->trans('CheckForModuleUpdate').'<br>'.$langs->trans('CheckForModuleUpdateHelp'), 'fa fa-sync', $_SERVER["PHP_SELF"].'?action=checklastversion&token='.newToken().'&mode='.$mode.$param, '', 1, array('morecss'=>'reposition'));
 	$moreforfilter .= dolGetButtonTitleSeparator();
+	$moreforfilter .= dolGetButtonTitle($langs->trans('ViewList'), '', 'fa fa-bars imgforviewmode', $_SERVER["PHP_SELF"].'?mode=common'.$param, '', ($mode == 'common' ? 2 : 1), array('morecss'=>'reposition'));
 	$moreforfilter .= dolGetButtonTitle($langs->trans('ViewKanban'), '', 'fa fa-th-list imgforviewmode', $_SERVER["PHP_SELF"].'?mode=commonkanban'.$param, '', ($mode == 'commonkanban' ? 2 : 1), array('morecss'=>'reposition'));
-	$moreforfilter .= dolGetButtonTitle($langs->trans('ViewList'), '', 'fa fa-list-alt imgforviewmode', $_SERVER["PHP_SELF"].'?mode=common'.$param, '', ($mode == 'common' ? 2 : 1), array('morecss'=>'reposition'));
 	$moreforfilter .= '</li></ul></div>';
 
 	//$moreforfilter .= '<div class="floatright center marginrightonly hideonsmartphone" style="padding-top: 3px"><span class="paddingright">'.$moreinfo.'</span> '.$moreinfo2.'</div>';
 
-	$moreforfilter .= '<div class="colorbacktimesheet float valignmiddle">';
-	$moreforfilter .= '<div class="divsearchfield paddingtop">';
+	$moreforfilter .= '<div class="divfilteralone colorbacktimesheet float valignmiddle">';
+	$moreforfilter .= '<div class="divsearchfield paddingtop paddingbottom valignmiddle inline-block">';
 	$moreforfilter .= img_picto($langs->trans("Filter"), 'filter', 'class="paddingright opacityhigh hideonsmartphone"').'<input type="text" id="search_keyword" name="search_keyword" class="maxwidth125" value="'.dol_escape_htmltag($search_keyword).'" placeholder="'.dol_escape_htmltag($langs->trans('Keyword')).'">';
 	$moreforfilter .= '</div>';
-	$moreforfilter .= '<div class="divsearchfield paddingtop">';
-	$moreforfilter .= $form->selectarray('search_nature', $arrayofnatures, dol_escape_htmltag($search_nature), $langs->trans('Origin'), 0, 0, '', 0, 0, 0, '', 'maxwidth200', 1);
+	$moreforfilter .= '<div class="divsearchfield paddingtop paddingbottom valignmiddle inline-block">';
+	$moreforfilter .= $form->selectarray('search_nature', $arrayofnatures, dol_escape_htmltag($search_nature), $langs->trans('Origin'), 0, 0, '', 0, 0, 0, '', 'maxwidth250', 1);
 	$moreforfilter .= '</div>';
 	if (getDolGlobalInt('MAIN_FEATURES_LEVEL')) {
 		$array_version = array('stable'=>$langs->transnoentitiesnoconv("Stable"));
@@ -553,17 +557,17 @@ if ($mode == 'common' || $mode == 'commonkanban') {
 		if ($conf->global->MAIN_FEATURES_LEVEL > 1) {
 			$array_version['development'] = $langs->trans("Development");
 		}
-		$moreforfilter .= '<div class="divsearchfield paddingtop">';
+		$moreforfilter .= '<div class="divsearchfield paddingtop paddingbottom valignmiddle inline-block">';
 		$moreforfilter .= $form->selectarray('search_version', $array_version, $search_version, $langs->trans('Version'), 0, 0, '', 0, 0, 0, '', 'maxwidth150', 1);
 		$moreforfilter .= '</div>';
 	}
-	$moreforfilter .= '<div class="divsearchfield paddingtop">';
+	$moreforfilter .= '<div class="divsearchfield paddingtop paddingbottom valignmiddle inline-block">';
 	$moreforfilter .= $form->selectarray('search_status', array('active'=>$langs->transnoentitiesnoconv("Enabled"), 'disabled'=>$langs->transnoentitiesnoconv("Disabled")), $search_status, $langs->trans('Status'), 0, 0, '', 0, 0, 0, '', 'maxwidth150', 1);
 	$moreforfilter .= '</div>';
 	$moreforfilter .= ' ';
-	$moreforfilter .= '<div class="divsearchfield">';
-	$moreforfilter .= '<input type="submit" name="buttonsubmit" class="button" value="'.dol_escape_htmltag($langs->trans("Refresh")).'">';
-	if ($search_keyword || $search_status || $search_nature || $search_version) {
+	$moreforfilter .= '<div class="divsearchfield valignmiddle inline-block">';
+	$moreforfilter .= '<input type="submit" name="buttonsubmit" class="button small" value="'.dol_escape_htmltag($langs->trans("Refresh")).'">';
+	if ($search_keyword || ($search_nature && $search_nature != '-1') || ($search_version && $search_version != '-1') || ($search_status && $search_status != '-1')) {
 		$moreforfilter .= ' ';
 		$moreforfilter .= '<input type="submit" name="buttonreset" class="buttonreset noborderbottom" value="'.dol_escape_htmltag($langs->trans("Reset")).'">';
 	}
@@ -1139,7 +1143,7 @@ if ($mode == 'deploy') {
 		}
 
 		if ($allowfromweb == 1) {
-			print $langs->trans("UnpackPackageInModulesRoot", $dirins).'<br>';
+			print '<span class="opacitymedium">'.$langs->trans("UnpackPackageInModulesRoot", $dirins).'</span><br>';
 
 			print '<br>';
 
@@ -1213,7 +1217,7 @@ if ($mode == 'deploy') {
 				});
 				</script>'."\n";
 				// MAX_FILE_SIZE doit précéder le champ input de type file
-				print '<input type="hidden" name="max_file_size" value="'.($maxmin * 1024).'">';
+				print '<input type="hidden" name="MAX_FILE_SIZE" value="'.($maxmin * 1024).'">';
 			}
 
 			print '<input class="flat minwidth400" type="file" name="fileinstall" id="fileinstall"> ';

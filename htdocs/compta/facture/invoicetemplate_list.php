@@ -96,8 +96,8 @@ $search_unit_frequency = GETPOST('search_unit_frequency', 'alpha');
 $search_status = GETPOST('search_status', 'int');
 
 $limit = GETPOST('limit', 'int') ?GETPOST('limit', 'int') : $conf->liste_limit;
-$sortfield = GETPOST("sortfield", 'alpha');
-$sortorder = GETPOST("sortorder", 'alpha');
+$sortfield = GETPOST('sortfield', 'aZ09comma');
+$sortorder = GETPOST('sortorder', 'aZ09comma');
 $page = GETPOSTISSET('pageplusone') ? (GETPOST('pageplusone') - 1) : GETPOST("page", 'int');
 if (empty($page) || $page == -1) {
 	$page = 0;
@@ -257,7 +257,7 @@ llxHeader('', $langs->trans("RepeatableInvoices"), 'ch-facture.html#s-fac-factur
 
 $form = new Form($db);
 $formother = new FormOther($db);
-if (!empty($conf->projet->enabled)) {
+if (!empty($conf->project->enabled)) {
 	$formproject = new FormProjets($db);
 }
 $companystatic = new Societe($db);
@@ -721,7 +721,6 @@ if ($resql) {
 			if (!empty($arrayfields['f.titre']['checked'])) {
 				print '<td class="nowrap tdoverflowmax200">';
 				print $invoicerectmp->getNomUrl(1);
-				print "</a>";
 				print "</td>\n";
 				if (!$i) {
 					$totalarray['nbfield']++;
@@ -765,7 +764,7 @@ if ($resql) {
 			}
 			// Payment term
 			if (!empty($arrayfields['f.fk_cond_reglement']['checked'])) {
-				print '<td class="right">';
+				print '<td class="tdoverflowmax150">';
 				$form->form_conditions_reglement('', $objp->fk_cond_reglement, 'none');
 				print '</td>'."\n";
 				if (!$i) {
@@ -774,7 +773,7 @@ if ($resql) {
 			}
 			// Payment mode
 			if (!empty($arrayfields['f.fk_mode_reglement']['checked'])) {
-				print '<td class="right">';
+				print '<td class="tdoverflowmax150">';
 				$form->form_modes_reglement('', $objp->fk_mode_reglement, 'none');
 				print '</td>'."\n";
 				if (!$i) {
@@ -858,7 +857,7 @@ if ($resql) {
 				}
 			}
 			if (!empty($arrayfields['f.datec']['checked'])) {
-				print '<td class="center">';
+				print '<td class="center nowraponall">';
 				print dol_print_date($db->jdate($objp->datec), 'dayhour');
 				print '</td>';
 				if (!$i) {
@@ -866,7 +865,7 @@ if ($resql) {
 				}
 			}
 			if (!empty($arrayfields['f.tms']['checked'])) {
-				print '<td class="center">';
+				print '<td class="center nowraponall">';
 				print dol_print_date($db->jdate($objp->tms), 'dayhour');
 				print '</td>';
 				if (!$i) {
